@@ -25,3 +25,4 @@ frontend/dist/
 design/*.png
 *.wav
 .DS_Store
+*.tsbuildinfo
