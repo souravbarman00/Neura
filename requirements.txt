@@ -1,0 +1,6 @@
+# Neura — Personal AI Assistant (Stage 1: the private brain)
+neuro-san==0.6.63
+langchain-anthropic>=0.3.13
+chromadb>=0.5.0          # local vector store + on-device default embeddings (all-MiniLM ONNX, no torch)
+pypdf>=4.0              # PDF text extraction for ingestion
+python-dotenv>=1.0

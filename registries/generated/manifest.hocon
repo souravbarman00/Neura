@@ -1,0 +1,6 @@
+{
+    # Dynamically-spawned agent networks are added here (by the spawn flow).
+
+    "generated/language_translator.hocon": true,
+
+}

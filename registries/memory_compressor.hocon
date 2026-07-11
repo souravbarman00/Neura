@@ -1,0 +1,42 @@
+{
+    # Dedicated (cheaper) model for background memory compression.
+    "llm_config": {
+        "class": "anthropic",
+        "model_name": "claude-haiku-4-5-20251001",
+        "temperature": 0.1
+    },
+
+    "metadata": {
+        "description": "Compresses a conversation transcript into a compact, factual memory summary.",
+        "tags": ["memory", "compression", "internal"]
+    },
+
+    "tools": [
+        {
+            "name": "compressor",
+            "function": {
+                "description": "Fold a conversation (and any prior summary) into an updated compact memory."
+            },
+            "instructions": """
+You are a memory compressor. You are given an optional PRIOR SUMMARY and a batch of
+newer conversation turns between a user and their assistant "Neura".
+
+Produce an UPDATED memory summary that merges the prior summary with the new turns.
+
+Preserve, in this priority order:
+- Durable facts the user stated about themselves, their work, and preferences.
+- Decisions made and their rationale.
+- Named entities (projects, people, files, tools) and how they relate.
+- Open tasks / things to follow up on.
+- Key answers Neura gave that may be referenced later.
+
+Drop: greetings, chit-chat, redundant restatements, and anything ephemeral.
+
+Output ONLY the updated summary as terse bullet points grouped under short headers
+(Facts, Decisions, Entities, Open items). No preamble, no closing remarks. Keep it
+under ~250 words.
+""",
+            "command": "Compress the conversation into an updated memory summary."
+        }
+    ]
+}

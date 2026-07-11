@@ -1,0 +1,44 @@
+@import "./theme/tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Ported alive graph classes (from src/styles/globals.css) ---- */
+.react-flow__handle.alive-handle { opacity: 0; }
+
+.react-flow__node:hover { z-index: 1000 !important; }
+.react-flow__node:has(.alive-node-active) { z-index: 900 !important; }
+
+.alive-node-scale {
+  transform-origin: 50% 50%;
+  transition: transform 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  will-change: transform;
+}
+.react-flow__node:hover .alive-node-scale,
+.alive-magnify-active .alive-node-scale.alive-node-active { transform: scale(var(--magnify, 1)); }
+
+@keyframes alive-plasma {
+  0%, 100% {
+    box-shadow:
+      0 0 10px 1px rgb(var(--node-color, var(--alive-accent)) / 0.6),
+      0 0 26px 5px rgb(var(--node-color, var(--alive-accent)) / 0.4),
+      0 0 46px 10px rgb(var(--node-color, var(--alive-accent)) / 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 16px 3px rgb(var(--node-color, var(--alive-accent)) / 0.9),
+      0 0 40px 10px rgb(var(--node-color, var(--alive-accent)) / 0.6),
+      0 0 72px 20px rgb(var(--node-color, var(--alive-accent)) / 0.3);
+  }
+}
+.alive-node-active {
+  border-radius: 0.5rem;
+  outline: 1.5px solid rgb(var(--node-color, var(--alive-accent)));
+  animation: alive-plasma 1.3s ease-in-out infinite;
+}
+.alive-node-selected { outline: 2px solid rgb(var(--node-hl, var(--alive-accent))); outline-offset: 2px; }
+
+@keyframes alive-dash { to { stroke-dashoffset: -14; } }
+.alive-edge-flow { stroke-dasharray: 7 5; animation: alive-dash 0.7s linear infinite; }
+@keyframes alive-dash-rev { to { stroke-dashoffset: 14; } }
+.alive-edge-flow-rev { stroke-dasharray: 7 5; animation: alive-dash-rev 0.7s linear infinite; }

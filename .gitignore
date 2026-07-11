@@ -1,0 +1,26 @@
+# Secrets & credentials — NEVER commit
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime data & personal state (conversations DB, memory, chroma vectors)
+data/
+logs/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Screenshots / audio / misc
+design/*.png
+*.wav
+.DS_Store

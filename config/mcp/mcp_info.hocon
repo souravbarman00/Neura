@@ -1,0 +1,117 @@
+# Copyright © 2025-2026 Cognizant Technology Solutions Corp, www.cognizant.com.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# END COPYRIGHT
+
+# ALIVE curated MCP catalog.
+# ----------------------------------------------------------------------------
+# This file is a config-only, zero-code extension of the vendored example at
+# neuro_san_studio/mcp/mcp_info.hocon. The Designer already wires MCP servers
+# by URL, so adding a server here makes its whitelisted tools available to any
+# network wired to that URL. `GetMcpTool.get_mcp_info_file` resolves this file
+# via MCP_SERVERS_INFO_FILE (env → cwd → bundled).
+#
+# Entry format:
+#     "mcp_server_url": {
+#         "http_headers": {                       # Optional: auth headers.
+#             "Authorization": "Bearer "${?ENV_VAR}
+#         },
+#         "tools": ["tool_1", "tool_2"]           # Optional: whitelist. All if omitted.
+#     },
+#
+# SECRETS POLICY — auth recipes ONLY, never secret values:
+#   * Reference credentials with the HOCON substitution syntax ${?ENV_VAR}.
+#   * The "?" makes the substitution OPTIONAL: the file still parses when the
+#     env var is unset (the header simply resolves without the secret). Set the
+#     env var in the runtime environment to activate authentication.
+#   * NEVER paste a token, key, or endpoint literal into this file.
+
+{
+    # -- Public / anonymous servers (no credentials required) -----------------
+
+    # DeepWiki — open documentation Q&A over public repos. No auth.
+    "https://mcp.deepwiki.com/mcp": {
+        "tools": ["read_wiki_structure", "ask_question"]
+    },
+
+    # You.com MCP — free tier (anonymous, no API key required).
+    # Exposes only the `you-search` tool. The full toolset (you-search,
+    # you-contents, you-research) requires the authenticated/paid tier — see the
+    # commented recipe near the bottom of this file.
+    # Docs: https://docs.you.com/build-with-agents/mcp-server
+    "https://api.you.com/mcp?profile=free": {
+        "tools": ["you-search"]
+    },
+
+    # -- Curated enterprise servers (auth via env-var recipes) ----------------
+
+    # GitHub (Copilot) MCP — enterprise source/issue automation.
+    # AUTH RECIPE: export GITHUB_MCP_TOKEN with a GitHub token that has the
+    # scopes needed for the whitelisted tools. When GITHUB_MCP_TOKEN is unset the
+    # file still parses (optional substitution) and the header resolves without a
+    # secret; set the env var to authenticate. Widen the `tools` whitelist below
+    # only to the operations you intend to expose.
+    # Docs: https://docs.github.com/en/copilot
+    "https://api.githubcopilot.com/mcp": {
+        "http_headers": {
+            "Authorization": "Bearer "${?GITHUB_MCP_TOKEN}
+        }
+        # No "tools" whitelist → load all GitHub tools (repos, code, issues, PRs, comments).
+    },
+}
+
+# ============================================================================
+# COPY-PASTE AUTH RECIPES (commented templates — move inside the { } above and
+# edit to enable). All credentials are env-var references only; no secrets here.
+# ============================================================================
+#
+# --- Generic OAuth / Bearer-token server ------------------------------------
+# AUTH RECIPE: export MCP_BEARER_TOKEN (OAuth access token or bearer secret).
+# Replace the URL and the `tools` whitelist with your server's real values.
+#     "https://your-enterprise-mcp.example.com/mcp": {
+#         "http_headers": {
+#             "Authorization": "Bearer "${?MCP_BEARER_TOKEN}
+#         },
+#         "tools": ["tool_1", "tool_2"]
+#     },
+#
+# --- Generic API-key-header server ------------------------------------------
+# AUTH RECIPE: export MCP_API_KEY. Some vendors use a custom header instead of
+# Authorization (e.g. X-Api-Key / X-Goog-Api-Key). Rename the header to match.
+#     "https://your-apikey-mcp.example.com/mcp": {
+#         "http_headers": {
+#             "X-Api-Key": ${?MCP_API_KEY}
+#         },
+#         "tools": ["tool_1"]
+#     },
+#
+# --- Google Maps Platform Grounding Lite MCP --------------------------------
+# AUTH RECIPE: export GOOGLE_API_KEY (Maps Grounding Lite API enabled).
+# Docs: https://developers.google.com/maps/ai/grounding-lite
+#     "https://mapstools.googleapis.com/mcp": {
+#         "http_headers": {
+#             "X-Goog-Api-Key": ${?GOOGLE_API_KEY}
+#         },
+#         "tools": ["search_places", "lookup_weather", "compute_routes"]
+#     },
+#
+# --- You.com MCP — paid tier ------------------------------------------------
+# AUTH RECIPE: export YDC_API_KEY. Adds you-contents and you-research on top of
+# the free you-search tier above. Docs: https://docs.you.com/build-with-agents/mcp-server
+#     "https://api.you.com/mcp": {
+#         "http_headers": {
+#             "Authorization": "Bearer "${?YDC_API_KEY}
+#         },
+#         "tools": ["you-search", "you-contents", "you-research"]
+#     },

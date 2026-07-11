@@ -1,0 +1,68 @@
+/* ALIVE design tokens (ported) — used by the agent-network graph components.
+   Channel triplets so Tailwind can apply /opacity. Light = :root, dark override. */
+:root {
+  --alive-radius-sm: 6px;
+  --alive-radius-md: 10px;
+  --alive-radius-lg: 14px;
+  --alive-radius-xl: 20px;
+  --alive-radius-2xl: 28px;
+  --alive-radius-full: 9999px;
+  --alive-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --alive-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --alive-bg-canvas: 246 248 252;
+  --alive-bg-panel: 255 255 255;
+  --alive-bg-elevated: 255 255 255;
+  --alive-bg-input: 241 244 249;
+  --alive-bg-hover: 238 241 247;
+  --alive-line-subtle: 229 233 241;
+  --alive-line-strong: 205 213 227;
+  --alive-text-primary: 15 23 41;
+  --alive-text-secondary: 71 85 105;
+  --alive-text-muted: 122 133 152;
+  --alive-text-inverse: 255 255 255;
+  --alive-accent: 99 102 241;
+  --alive-accent-hover: 79 70 229;
+  --alive-accent-contrast: 255 255 255;
+  --alive-node-frontman: 147 51 234;
+  --alive-node-agent: 37 99 235;
+  --alive-node-tool: 5 150 105;
+  --alive-node-external: 217 119 6;
+  --alive-node-subnetwork: 8 145 178;
+  --alive-success: 5 150 105;
+  --alive-warning: 217 119 6;
+  --alive-danger: 225 29 72;
+  --alive-shadow-sm: 0 1px 2px 0 rgb(17 24 39 / 0.06);
+  --alive-shadow-md: 0 6px 16px -4px rgb(17 24 39 / 0.12);
+  --alive-shadow-lg: 0 20px 50px -8px rgb(17 24 39 / 0.18);
+  --alive-node-lift: 0 4px 16px -3px rgb(15 23 41 / 0.24), 0 1px 3px 0 rgb(15 23 41 / 0.12);
+}
+
+[data-theme="dark"] {
+  --alive-bg-canvas: 10 14 23;
+  --alive-bg-panel: 17 24 38;
+  --alive-bg-elevated: 22 30 46;
+  --alive-bg-input: 14 21 34;
+  --alive-bg-hover: 27 36 54;
+  --alive-line-subtle: 35 43 59;
+  --alive-line-strong: 48 58 82;
+  --alive-text-primary: 230 234 242;
+  --alive-text-secondary: 154 166 188;
+  --alive-text-muted: 100 112 138;
+  --alive-text-inverse: 10 14 23;
+  --alive-accent: 99 102 241;
+  --alive-accent-hover: 124 127 242;
+  --alive-accent-contrast: 255 255 255;
+  --alive-node-frontman: 168 85 247;
+  --alive-node-agent: 59 130 246;
+  --alive-node-tool: 16 185 129;
+  --alive-node-external: 245 158 11;
+  --alive-node-subnetwork: 34 211 238;
+  --alive-success: 16 185 129;
+  --alive-warning: 245 158 11;
+  --alive-danger: 244 63 94;
+  --alive-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --alive-shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.45);
+  --alive-shadow-lg: 0 20px 50px -8px rgb(0 0 0 / 0.55);
+  --alive-node-lift: 0 4px 16px -6px rgb(0 0 0 / 0.5);
+}

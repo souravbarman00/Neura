@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neura — Personal AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0C11; --panel:#0F1218; --elevated:#151922; --field:#12151C;
+    --hover:#1B2029; --line:#20252F; --line-soft:#181C24;
+    --fg:#E9ECF2; --fg-soft:#AEB6C4; --fg-muted:#6C7688;
+    --accent:#7C7CF6; --accent-2:#4FD1C5; --accent-soft:rgba(124,124,246,.14);
+    --success:#48C78E; --strong:#fff;
+    --radius:16px; --radius-sm:11px;
+    --shadow:0 10px 40px -12px rgba(0,0,0,.6);
+    --shadow-sm:0 4px 18px -8px rgba(0,0,0,.55);
+    --bg-grad1:rgba(124,124,246,.10); --bg-grad2:rgba(79,209,197,.07);
+  }
+  [data-theme="light"]{
+    --bg:#F6F7FB; --panel:#FFFFFF; --elevated:#FFFFFF; --field:#F3F5F9;
+    --hover:#EBEEF4; --line:#E1E6EF; --line-soft:#EDF0F6;
+    --fg:#171A21; --fg-soft:#4B5464; --fg-muted:#8A93A4;
+    --accent:#5A5AF0; --accent-2:#0FA79A; --accent-soft:rgba(90,90,240,.10);
+    --success:#12A55E; --strong:#0B0E14;
+    --shadow:0 12px 34px -18px rgba(23,34,66,.28);
+    --shadow-sm:0 4px 14px -8px rgba(23,34,66,.22);
+    --bg-grad1:rgba(90,90,240,.07); --bg-grad2:rgba(15,167,154,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--fg);
+    -webkit-font-smoothing:antialiased;letter-spacing:-.01em;
+    background-image:radial-gradient(1200px 600px at 80% -10%, var(--bg-grad1), transparent 60%),
+                     radial-gradient(900px 500px at -5% 110%, var(--bg-grad2), transparent 55%);
+  }
+  .app{display:grid;grid-template-columns:280px 1fr 340px;height:100vh;overflow:hidden}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+
+  /* SIDEBAR */
+  .side{background:var(--panel);border-right:1px solid var(--line-soft);display:flex;flex-direction:column;padding:18px 14px}
+  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 20px}
+  .orb{width:34px;height:34px;border-radius:11px;background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--accent));
+       box-shadow:0 0 0 1px rgba(255,255,255,.08),0 6px 18px -6px rgba(124,124,246,.7);position:relative}
+  .orb::after{content:"";position:absolute;inset:6px;border-radius:7px;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),transparent 55%)}
+  .brand h1{font-size:15px;font-weight:600;line-height:1}
+  .brand span{font-size:11px;color:var(--fg-muted);font-weight:450}
+  .newchat{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:var(--radius-sm);
+    background:linear-gradient(180deg,rgba(124,124,246,.16),rgba(124,124,246,.06));border:1px solid rgba(124,124,246,.25);
+    color:var(--fg);font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:22px;font-family:inherit}
+  .newchat svg{width:16px;height:16px;stroke:var(--accent)}
+  .sect{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--fg-muted);font-weight:600;padding:0 9px 9px}
+  .conv{display:flex;flex-direction:column;gap:2px;margin-bottom:22px}
+  .conv a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--fg-soft);font-size:13px;text-decoration:none;cursor:pointer}
+  .conv a .dot{width:6px;height:6px;border-radius:50%;background:var(--fg-muted);flex:none}
+  .conv a.active{background:var(--hover);color:var(--fg)}
+  .conv a.active .dot{background:var(--accent-2)}
+  .conv a:hover:not(.active){background:var(--line-soft)}
+  .kb{display:flex;flex-direction:column;gap:7px}
+  .kb .row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:var(--field);border:1px solid var(--line-soft)}
+  .kb .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--accent-soft);flex:none}
+  .kb .ic svg{width:14px;height:14px;stroke:var(--accent)}
+  .kb .row .t{font-size:12.5px;font-weight:500}
+  .kb .row .c{font-size:11px;color:var(--fg-muted)}
+  .kb .row .meta{margin-left:auto;text-align:right}
+  .side .spacer{flex:1}
+  .profile{display:flex;align-items:center;gap:10px;padding:10px;border-radius:11px;border:1px solid var(--line-soft);background:var(--field)}
+  .avatar{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#3a3f6b,#2b6b64);display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff}
+  .profile .t{font-size:13px;font-weight:500}
+  .profile .s{font-size:11px;color:var(--fg-muted)}
+  .gear{margin-left:auto;width:16px;height:16px;stroke:var(--fg-muted);cursor:pointer;background:none;border:none}
+
+  /* MAIN */
+  .main{display:flex;flex-direction:column;min-width:0;background:transparent}
+  .topbar{display:flex;align-items:center;gap:14px;padding:16px 26px;border-bottom:1px solid var(--line-soft)}
+  .topbar .title{font-size:15px;font-weight:600}
+  .topbar .title small{display:block;font-size:11.5px;color:var(--fg-muted);font-weight:450;margin-top:2px}
+  .topbar .grow{flex:1}
+  .dial{display:flex;background:var(--field);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px}
+  .dial button{display:flex;align-items:center;gap:7px;border:none;background:transparent;color:var(--fg-muted);
+    font-size:12.5px;font-weight:500;padding:7px 13px;border-radius:8px;cursor:pointer;font-family:inherit}
+  .dial button.on{background:linear-gradient(180deg,rgba(124,124,246,.22),rgba(124,124,246,.08));color:var(--fg);box-shadow:var(--shadow-sm)}
+  .dial button svg{width:14px;height:14px}
+  .dial .lock{stroke:var(--accent-2)} .dial .cloud{stroke:var(--fg-muted)}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:9px;background:var(--field);
+    border:1px solid var(--line);font-size:12px;color:var(--fg-soft);font-weight:500}
+  .chip .g{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success)}
+  .chip .g.off{background:var(--fg-muted);box-shadow:none}
+  .iconbtn{width:36px;height:36px;border-radius:10px;background:var(--field);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer}
+  .iconbtn svg{width:17px;height:17px;stroke:var(--fg-soft)}
+
+  .thread{flex:1;overflow:auto;padding:30px 8%;display:flex;flex-direction:column;gap:22px}
+  .msg{display:flex;gap:14px;max-width:760px}
+  .msg.user{align-self:flex-end;flex-direction:row-reverse}
+  .msg .av{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:600}
+  .msg.ai .av{background:conic-gradient(from 200deg,var(--accent),var(--accent-2))}
+  .msg.user .av{background:linear-gradient(135deg,#3a3f6b,#2b6b64);color:#fff}
+  .bubble{padding:15px 18px;border-radius:15px;font-size:14px;line-height:1.62;color:var(--fg);white-space:pre-wrap;word-wrap:break-word}
+  .msg.user .bubble{background:var(--accent-soft);border:1px solid rgba(124,124,246,.22);border-top-right-radius:5px}
+  .msg.ai .bubble{background:var(--panel);border:1px solid var(--line-soft);border-top-left-radius:5px}
+  .bubble strong{color:var(--strong);font-weight:600}
+  .bubble code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--field);padding:1px 5px;border-radius:5px}
+  .msg .speak{margin-top:8px;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--fg-muted);background:none;border:none;cursor:pointer;padding:0}
+  .msg .speak svg{width:13px;height:13px;stroke:var(--accent-2)}
+  .activity{align-self:flex-start;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--fg-muted);padding-left:44px}
+  .activity .spin{width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .empty{margin:auto;text-align:center;color:var(--fg-muted);max-width:420px}
+  .empty .bigorb{width:60px;height:60px;border-radius:18px;margin:0 auto 18px;background:conic-gradient(from 200deg,var(--accent),var(--accent-2),var(--accent));box-shadow:0 10px 30px -8px rgba(124,124,246,.6)}
+  .empty h2{font-size:20px;font-weight:600;color:var(--fg);margin-bottom:8px}
+  .empty p{font-size:13.5px;line-height:1.6}
+  .suggest{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:20px}
+  .suggest button{font-family:inherit;font-size:12.5px;color:var(--fg-soft);background:var(--field);border:1px solid var(--line);border-radius:20px;padding:8px 14px;cursor:pointer}
+  .suggest button:hover{border-color:var(--accent);color:var(--fg)}
+
+  .composer{padding:16px 8% 24px}
+  .cbox{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow)}
+  .cbox textarea{width:100%;border:none;background:transparent;color:var(--fg);font-family:inherit;font-size:14px;resize:none;outline:none;min-height:24px;max-height:160px;line-height:1.5}
+  .cbox textarea::placeholder{color:var(--fg-muted)}
+  .cbox .row{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .ctool{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--field);display:grid;place-items:center;cursor:pointer}
+  .ctool svg{width:16px;height:16px;stroke:var(--fg-soft)}
+  .chint{font-size:11.5px;color:var(--fg-muted);display:flex;align-items:center;gap:7px}
+  .chint .lk{width:12px;height:12px;stroke:var(--accent-2)}
+  .cgrow{flex:1}
+  .send{width:38px;height:38px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--accent),#6f6ff0);display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 16px -6px rgba(124,124,246,.7)}
+  .send:disabled{opacity:.5;cursor:default}
+  .send svg{width:17px;height:17px;stroke:#fff}
+
+  /* RIGHT PANEL */
+  .right{background:var(--panel);border-left:1px solid var(--line-soft);padding:18px 16px;overflow:auto;display:flex;flex-direction:column;gap:20px}
+  .rhead{display:flex;align-items:center;gap:9px}
+  .rhead h3{font-size:13px;font-weight:600}
+  .rhead .badge{margin-left:auto;font-size:10.5px;color:var(--accent-2);background:rgba(79,209,197,.1);border:1px solid rgba(79,209,197,.22);padding:3px 8px;border-radius:20px}
+  .card{background:var(--field);border:1px solid var(--line-soft);border-radius:12px;padding:13px 14px}
+  .know{display:flex;flex-direction:column;gap:9px}
+  .know .k{display:flex;gap:11px;align-items:flex-start}
+  .know .k .ki{width:26px;height:26px;border-radius:7px;background:var(--accent-soft);display:grid;place-items:center;flex:none}
+  .know .k .ki svg{width:13px;height:13px;stroke:var(--accent)}
+  .know .k .kt{font-size:12.5px;font-weight:500;line-height:1.4}
+  .know .k .kc{font-size:11px;color:var(--fg-muted);margin-top:2px;word-break:break-all}
+  .muted-empty{font-size:12px;color:var(--fg-muted);font-style:italic}
+  .vault{display:flex;flex-direction:column;gap:8px}
+  .vault .v{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--fg-soft)}
+  .vault .v svg{width:13px;height:13px;stroke:var(--accent-2);flex:none}
+  .vault .v .val{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--fg-muted)}
+  .mnote{font-size:11px;color:var(--fg-muted);margin-top:10px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand"><div class="orb"></div><div><h1>Neura</h1><span>Your Personal AI</span></div></div>
+    <button class="newchat" onclick="newChat()">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New conversation
+    </button>
+    <div class="sect">Recent</div>
+    <nav class="conv" id="recent">
+      <a class="active"><span class="dot"></span>New conversation</a>
+    </nav>
+    <div class="sect">Knowledge</div>
+    <div class="kb">
+      <div class="row">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+        <div><div class="t">Documents</div><div class="c">Indexed locally</div></div>
+        <div class="meta"><div class="t" id="kbcount">—</div><div class="c">chunks</div></div>
+      </div>
+      <div class="row">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div>
+        <div><div class="t">Privacy</div><div class="c">On-device embeddings</div></div>
+        <div class="meta"><div class="t" style="color:var(--accent-2)">●</div><div class="c">local</div></div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="profile">
+      <div class="avatar">SJ</div>
+      <div><div class="t">Sourav J.</div><div class="s">Private workspace</div></div>
+      <button class="gear" title="Toggle theme" onclick="toggleTheme()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <section class="main">
+    <div class="topbar">
+      <div class="title">Neura<small id="subtitle">Grounded in your local knowledge</small></div>
+      <div class="grow"></div>
+      <div class="dial">
+        <button class="on" title="Secrets & PII stay in sly_data, never in prompts"><svg class="lock" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>Private</button>
+        <button title="Cloud LLM composes answers" disabled style="opacity:.55;cursor:default"><svg class="cloud" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 18a4 4 0 010-8 5 5 0 019.6-1.5A3.5 3.5 0 0118 18z"/></svg>Cloud</button>
+      </div>
+      <div class="chip"><span class="g" id="statusdot"></span><span id="modelchip">Claude · Sonnet 4.5</span></div>
+    </div>
+
+    <div class="thread" id="thread">
+      <div class="empty" id="empty">
+        <div class="bigorb"></div>
+        <h2>Hi, I'm Neura.</h2>
+        <p>Your private AI. Ask me about your work, notes, and projects — I answer from your own locally-indexed knowledge.</p>
+        <div class="suggest">
+          <button onclick="quick(this)">What is Neuro SAN?</button>
+          <button onclick="quick(this)">Summarize my projects</button>
+          <button onclick="quick(this)">How are coded tools defined?</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="cbox">
+        <textarea id="input" rows="1" placeholder="Message Neura…" onkeydown="onKey(event)" oninput="autogrow(this)"></textarea>
+        <div class="row">
+          <div class="ctool" title="Attach (coming soon)"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 12.5l-8 8a5 5 0 01-7-7l8-8a3 3 0 014 4l-8 8a1 1 0 01-1.5-1.5l7-7"/></svg></div>
+          <div class="chint"><svg class="lk" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>Private mode · answers come from your own data</div>
+          <div class="cgrow"></div>
+          <button class="send" id="sendbtn" onclick="send()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right">
+    <div>
+      <div class="rhead"><h3>Sources in this answer</h3><span class="badge">local</span></div>
+      <div class="card" id="sources" style="margin-top:11px"><div class="muted-empty">Ask something — the files Neura used will appear here.</div></div>
+    </div>
+    <div>
+      <div class="rhead"><h3>What Neura knows about you</h3></div>
+      <div class="card know" style="margin-top:11px">
+        <div class="k"><div class="ki"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 4h16v16H4z"/></svg></div>
+          <div><div class="kt">Local knowledge base</div><div class="kc" id="kbdesc">Indexing your folders on-device</div></div></div>
+        <div class="k"><div class="ki"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div>
+          <div><div class="kt">Embeddings stay on device</div><div class="kc">all-MiniLM · nothing uploaded</div></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="rhead"><h3>Private vault</h3><span class="badge">sly_data</span></div>
+      <div class="card" style="margin-top:11px">
+        <div class="vault">
+          <div class="v"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>Credentials<span class="val">••••••••</span></div>
+          <div class="v"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>API tokens<span class="val">••••••••</span></div>
+        </div>
+        <div class="mnote">Sensitive values ride through sly_data — used by tools on your device, never placed in a model prompt.</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let busy = false;
+
+function toggleTheme(){
+  const el = document.documentElement;
+  el.dataset.theme = el.dataset.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('neura-theme', el.dataset.theme);
+}
+if(localStorage.getItem('neura-theme')) document.documentElement.dataset.theme = localStorage.getItem('neura-theme');
+const _qp = new URLSearchParams(location.search);
+if(_qp.get('theme')) document.documentElement.dataset.theme = _qp.get('theme');
+
+function autogrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,160)+'px'; }
+function onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }
+function quick(b){ $('#input').value=b.textContent; send(); }
+function newChat(){ $('#thread').innerHTML=''; showEmpty(); resetPanels(); }
+function showEmpty(){ /* empty state only shown initially */ }
+
+function resetPanels(){
+  $('#sources').innerHTML='<div class="muted-empty">Ask something — the files Neura used will appear here.</div>';
+}
+
+function fmt(text){
+  // minimal markdown: **bold**, `code`
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`([^`]+?)`/g,'<code>$1</code>');
+}
+
+function addMsg(role, text){
+  const empty = $('#empty'); if(empty) empty.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + (role==='user'?'user':'ai');
+  const av = document.createElement('div'); av.className='av';
+  av.textContent = role==='user' ? 'SJ' : '';
+  const bub = document.createElement('div'); bub.className='bubble'; bub.innerHTML = fmt(text);
+  const col = document.createElement('div'); col.appendChild(bub);
+  wrap.appendChild(av); wrap.appendChild(col);
+  $('#thread').appendChild(wrap);
+  $('#thread').scrollTop = $('#thread').scrollHeight;
+  return {bubble:bub, col};
+}
+
+function setActivity(on, label){
+  let a = $('#activity');
+  if(on){
+    if(!a){ a=document.createElement('div'); a.id='activity'; a.className='activity';
+      a.innerHTML='<div class="spin"></div><span></span>'; $('#thread').appendChild(a); }
+    a.querySelector('span').textContent = label || 'Searching your knowledge…';
+    $('#thread').scrollTop = $('#thread').scrollHeight;
+  } else if(a){ a.remove(); }
+}
+
+function renderSources(items){
+  if(!items || !items.length){ return; }
+  const html = items.map(it=>`
+    <div class="k" style="margin-bottom:9px">
+      <div class="ki"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 4h16v16H4z"/></svg></div>
+      <div><div class="kt">${it.name}</div><div class="kc">${it.source}${it.score?` · match ${it.score}`:''}</div></div>
+    </div>`).join('');
+  $('#sources').className='card know'; $('#sources').innerHTML = html;
+}
+
+function addSpeak(col, text){
+  const b=document.createElement('button'); b.className='speak';
+  b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Play';
+  b.onclick=()=>speak(text,b); col.appendChild(b);
+}
+
+async function speak(text, btn){
+  btn.textContent='…';
+  try{
+    const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:text.slice(0,1200),voice:'af_heart',speed:1.0})});
+    if(!r.ok) throw new Error('tts');
+    const buf=await r.arrayBuffer();
+    new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/wav'}))).play();
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Play';
+  }catch(e){ btn.textContent='voice offline'; }
+}
+
+async function send(){
+  const inp=$('#input'); const msg=inp.value.trim();
+  if(!msg || busy) return;
+  busy=true; $('#sendbtn').disabled=true;
+  addMsg('user', msg); inp.value=''; autogrow(inp);
+  setActivity(true);
+
+  const ai = {bubble:null, col:null}; let answer='';
+  try{
+    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:msg})});
+    const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n\n'))>=0){
+        const chunk=buf.slice(0,idx).trim(); buf=buf.slice(idx+2);
+        if(!chunk.startsWith('data:')) continue;
+        let ev; try{ ev=JSON.parse(chunk.slice(5).trim()); }catch{ continue; }
+        if(ev.type==='activity'){ setActivity(true, 'Thinking…'); }
+        else if(ev.type==='sources'){ renderSources(ev.items); setActivity(true,'Reading your files…'); }
+        else if(ev.type==='answer'){
+          answer=ev.text; setActivity(false);
+          if(!ai.bubble){ const m=addMsg('ai',answer); ai.bubble=m.bubble; ai.col=m.col; }
+          else{ ai.bubble.innerHTML=fmt(answer); }
+          $('#thread').scrollTop=$('#thread').scrollHeight;
+        }
+        else if(ev.type==='error'){ setActivity(false); if(!ai.bubble){const m=addMsg('ai','⚠️ '+ev.text);ai.bubble=m.bubble;} }
+      }
+    }
+  }catch(e){ setActivity(false); addMsg('ai','⚠️ Could not reach Neura. Is the server running?'); }
+  setActivity(false);
+  if(ai.col && answer) addSpeak(ai.col, answer);
+  busy=false; $('#sendbtn').disabled=false; inp.focus();
+}
+
+async function loadHealth(){
+  try{
+    const h=await (await fetch('/api/health')).json();
+    $('#statusdot').className = 'g' + (h.runtime?'':' off');
+    if(!h.runtime) $('#subtitle').textContent='Server offline — start scripts/run_server.sh';
+    if(typeof h.kb_chunks==='number' && h.kb_chunks>=0){
+      $('#kbcount').textContent = h.kb_chunks.toLocaleString();
+      $('#kbdesc').textContent = h.kb_chunks.toLocaleString()+' chunks indexed on-device';
+    }
+  }catch{ $('#statusdot').className='g off'; }
+}
+loadHealth();
+
+// Auto-ask hook for demos/screenshots: open with #ask=your+question
+if(location.hash.startsWith('#ask=')){
+  const q = decodeURIComponent(location.hash.slice(5)).replace(/\+/g,' ');
+  window.addEventListener('load', ()=>{ $('#input').value=q; setTimeout(send, 400); });
+}
+</script>
+</body>
+</html>

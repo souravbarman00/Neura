@@ -1,0 +1,10 @@
+{
+    # Default LLM for every agent in the network.
+    # "claude-sonnet" resolves to the latest Claude Sonnet in neuro-san's model registry.
+    # Requires ANTHROPIC_API_KEY in the environment (see .env).
+    "llm_config": {
+        "class": "anthropic",
+        "model_name": "claude-sonnet-4-5-20250929",
+        "temperature": 0.2
+    }
+}

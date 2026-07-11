@@ -1,0 +1,4 @@
+# Empty on purpose: ALIVE's designer composes NO external networks, so
+# every generated network is self-contained and directly talkable.
+{
+}
