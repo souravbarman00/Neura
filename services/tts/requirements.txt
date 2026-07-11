@@ -1,0 +1,8 @@
+# Neura Kokoro TTS service — kept separate from the app so the heavy ML deps
+# (torch etc., pulled in by `kokoro`) don't bloat the main install.
+kokoro>=0.9.4        # local 24 kHz text-to-speech (downloads hexgrad/Kokoro-82M on first run)
+soundfile>=0.12      # audio I/O used by kokoro
+numpy>=1.24
+fastapi>=0.115
+uvicorn[standard]>=0.30
+# System prerequisite (not pip): espeak-ng   →   macOS: brew install espeak-ng

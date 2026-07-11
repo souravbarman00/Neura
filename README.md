@@ -26,7 +26,7 @@ professional web UI, local knowledge about you, and optional voice.
 - [x] Research: neuro-san capabilities, alive's vector-DB + MCP + backend/UI patterns, Kokoro
 - [ ] **Figma design of the UI (in progress — design first)**
 - [ ] Stage 1: private brain (network + local KB)
-- [ ] Stage 2: Kokoro voice service
+- [x] Stage 2: Kokoro voice service (bundled — `services/tts`, run via `scripts/run_tts.sh`)
 - [ ] Stage 3: professional UI
 - [ ] Stage 4: privacy dial
 
@@ -35,9 +35,10 @@ professional web UI, local knowledge about you, and optional voice.
 personal-ai-assistant/
 ├── registries/neura.hocon   # the Neura agent network
 ├── coded_tools/neura/       # local knowledge base (Chroma) + kb_search tool
-├── config/llm_config.hocon  # Claude Sonnet 4.5
-├── scripts/                 # ingest.py, run_server.sh, run_ui.sh
+├── config/llm_config.hocon  # active LLM — Claude / OpenAI / Mistral (switch in UI → Settings → Model)
+├── scripts/                 # ingest.py, run_server.sh, run_ui.sh, run_tts.sh
 ├── backend/app.py           # FastAPI: serves UI, proxies chat (SSE) + voice
+├── services/tts/            # bundled Kokoro TTS service (own venv; :8900)
 ├── frontend/                # Vite + React + TS app (build → frontend/dist)
 ├── data/chroma/             # local vector store (gitignored)
 └── design/                  # Figma exports / screenshots
@@ -48,8 +49,10 @@ personal-ai-assistant/
 # 1. Runtime (agent network) — :8099
 scripts/run_server.sh
 
-# 2. Voice (optional) — :8900
-/Users/2504436/tts-tool/run.sh
+# 2. Voice (optional) — :8900  [bundled Kokoro TTS]
+#    First run creates services/tts/.venv, installs deps, and downloads the
+#    Kokoro model. System prereq: espeak-ng (macOS: brew install espeak-ng).
+scripts/run_tts.sh
 
 # 3. UI backend (serves the built React app) — :8010
 scripts/run_ui.sh
