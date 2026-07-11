@@ -7,3 +7,6 @@ langchain-mistralai>=0.2       # Mistral
 chromadb>=0.5.0          # local vector store + on-device default embeddings (all-MiniLM ONNX, no torch)
 pypdf>=4.0              # PDF text extraction for ingestion
 python-dotenv>=1.0
+pyhocon>=0.3.60         # parse the agent-network + llm_config HOCON files
+aiofiles>=23.0          # async file I/O for persistent memory (markdown store)
+watchdog>=4.0           # auto-re-index watcher for local repos/folders
