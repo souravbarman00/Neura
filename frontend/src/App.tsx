@@ -8,6 +8,7 @@ import RightPanel from "./components/RightPanel";
 import BuildAgentModal from "./components/BuildAgentModal";
 import KnowledgeModal from "./components/KnowledgeModal";
 import NetworkView from "./components/NetworkView";
+import TaskPanel from "./components/TaskPanel";
 import ProfileModal from "./components/ProfileModal";
 import { listen, speak, speechSupported, type OrbState, type Speaker } from "./voice";
 import {
@@ -522,7 +523,7 @@ export default function App() {
   const graphEl = (
     <NetworkView
       open={netOpen}
-      floating={!focus && rightCollapsed && !isTablet}
+      floating={false}
       focus={focus}
       conversationId={currentId}
       theme={theme === "light" ? "light" : "dark"}
@@ -565,6 +566,7 @@ export default function App() {
       }}
     />
   );
+  const checklistEl = <TaskPanel items={checklist} progress={progress} />;
 
   return (
     <div className={"app" + (rightCollapsed ? " right-collapsed" : "") + (focus ? " focus" : "")}>
@@ -631,11 +633,16 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <>
-            {graphEl}
-            {threadEl}
-            {composerEl}
-          </>
+          <div className="home-split">
+            <div className="home-left">
+              <div className="home-graph">{graphEl}</div>
+              <div className="home-tasks">{checklistEl}</div>
+            </div>
+            <div className="home-right">
+              {threadEl}
+              {composerEl}
+            </div>
+          </div>
         )}
       </section>
 
@@ -644,8 +651,6 @@ export default function App() {
         sources={sources}
         kbChunks={kbChunks}
         network={currentNetwork}
-        checklist={checklist}
-        progress={progress}
         onClose={() => setRightOpen(false)}
       />
 

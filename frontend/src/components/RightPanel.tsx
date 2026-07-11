@@ -1,20 +1,16 @@
 import { useState } from "react";
 import type { Source } from "../types";
-import type { ChecklistItem } from "../api";
 import { File, Doc, Shield, Lock, Close, ChevronDown } from "../icons";
-import TaskPanel from "./TaskPanel";
 
 interface Props {
   open: boolean;
   sources: Source[];
   kbChunks: number | null;
   network: string;
-  checklist: ChecklistItem[];
-  progress: number | null;
   onClose(): void;
 }
 
-export default function RightPanel({ open, sources, kbChunks, network, checklist, progress, onClose }: Props) {
+export default function RightPanel({ open, sources, kbChunks, network, onClose }: Props) {
   const isNeura = network === "neura";
   const [srcOpen, setSrcOpen] = useState(true);
   return (
@@ -23,7 +19,6 @@ export default function RightPanel({ open, sources, kbChunks, network, checklist
         <span className="right-topbar-title">Details</span>
         <button className="rclose" onClick={onClose}><Close /></button>
       </div>
-      <TaskPanel items={checklist} progress={progress} />
       <div className={"rsection" + (srcOpen ? "" : " collapsed")}>
         <button className="rhead rhead-btn" onClick={() => setSrcOpen((v) => !v)}>
           <h3>Sources in this answer</h3>
