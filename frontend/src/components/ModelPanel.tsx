@@ -15,15 +15,25 @@ export default function ModelPanel() {
   useEffect(() => {
     getLlm()
       .then((r) => {
+        if (!r || !Array.isArray(r.providers) || r.providers.length === 0) {
+          setError(
+            "Couldn't load model settings. Restart the Neura UI backend so the new /api/llm endpoint is available."
+          );
+          return;
+        }
         setData(r);
-        setProvider(r.active.provider);
-        setModel(r.active.model || "");
+        setProvider(r.active?.provider || r.providers[0].id);
+        setModel(r.active?.model || "");
       })
-      .catch(() => setError("Couldn't load model settings."));
+      .catch(() =>
+        setError(
+          "Couldn't load model settings. Restart the Neura UI backend so the new /api/llm endpoint is available."
+        )
+      );
   }, []);
 
   const cur: LlmProvider | undefined = useMemo(
-    () => data?.providers.find((p) => p.id === provider),
+    () => data?.providers?.find((p) => p.id === provider),
     [data, provider]
   );
 
@@ -31,15 +41,15 @@ export default function ModelPanel() {
     setProvider(id);
     setApiKey("");
     setError("");
-    const p = data?.providers.find((x) => x.id === id);
+    const p = data?.providers?.find((x) => x.id === id);
     // keep the active model if we're returning to the active provider, else default to first
-    const activeSame = data?.active.provider === id && data?.active.model;
-    setModel(activeSame ? (data!.active.model as string) : p?.models[0] || "");
+    const activeSame = data?.active?.provider === id && data?.active?.model;
+    setModel(activeSame ? (data!.active.model as string) : p?.models?.[0] || "");
   }
 
   const busy = status === "saving" || status === "restarting";
   const isActive =
-    data?.active.provider === provider && data?.active.model === model;
+    data?.active?.provider === provider && data?.active?.model === model;
 
   async function save() {
     if (!cur || !model) return;
@@ -94,7 +104,7 @@ export default function ModelPanel() {
         {!data && !error && <div className="muted-empty">Loading…</div>}
         {error && status !== "error" && <div className="muted-empty">{error}</div>}
 
-        {data && (
+        {data?.providers && (
           <>
             {/* Provider selector */}
             <div className="mp-providers">
@@ -109,7 +119,7 @@ export default function ModelPanel() {
                   <span className={"mp-keydot" + (p.key_set ? " set" : "")}>
                     {p.key_set ? "key saved" : "no key"}
                   </span>
-                  {data.active.provider === p.id && <span className="mp-active">● active</span>}
+                  {data.active?.provider === p.id && <span className="mp-active">● active</span>}
                 </button>
               ))}
             </div>

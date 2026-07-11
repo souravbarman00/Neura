@@ -17,6 +17,7 @@ import {
   fetchHealth,
   resetContext,
   getConversation,
+  getLlm,
   getProfile,
   getWatch,
   listConversations,
@@ -37,6 +38,13 @@ let idSeq = 0;
 const nextId = () => `local-${++idSeq}`;
 type Mode = "strict" | "assist";
 
+// Friendly prefix for the top-bar model chip, by provider id.
+const PROVIDER_LABEL: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "OpenAI",
+  mistral: "Mistral",
+};
+
 export default function App() {
   const [theme, toggleTheme] = useTheme();
   const [networks, setNetworks] = useState<NetworkInfo[]>([]);
@@ -48,7 +56,7 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [busy, setBusy] = useState(false);
   const [runtimeOk, setRuntimeOk] = useState(true);
-  const [model] = useState("Claude · Sonnet 4.5");
+  const [model, setModel] = useState("…");
   const [kbChunks, setKbChunks] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("strict");
   const [buildOpen, setBuildOpen] = useState(false);
@@ -139,6 +147,21 @@ export default function App() {
       /* ignore */
     }
   }
+  async function refreshModel() {
+    try {
+      const r = await getLlm();
+      const prov = r.active?.provider || "";
+      const mdl = r.active?.model || "";
+      const pfx = PROVIDER_LABEL[prov] || prov || "Model";
+      setModel(mdl ? `${pfx} · ${mdl}` : pfx);
+    } catch {
+      /* keep previous label */
+    }
+  }
+
+  useEffect(() => {
+    refreshModel();
+  }, []);
 
   useEffect(() => {
     fetchHealth()
@@ -665,7 +688,10 @@ export default function App() {
       <ProfileModal
         open={profileOpen}
         network={currentNetwork}
-        onClose={() => setProfileOpen(false)}
+        onClose={() => {
+          setProfileOpen(false);
+          refreshModel(); // reflect any provider/model change made in Settings → Model
+        }}
         onSaved={(p) => setProfile(p)}
       />
     </div>
