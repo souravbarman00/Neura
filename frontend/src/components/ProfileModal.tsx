@@ -3,6 +3,7 @@ import { getProfile, saveProfile, type ProfileField } from "../api";
 import { Close, Shield } from "../icons";
 import NetworkConfigPanel from "./NetworkConfigPanel";
 import MemoryPanel from "./MemoryPanel";
+import ModelPanel from "./ModelPanel";
 
 interface Props {
   open: boolean;
@@ -27,7 +28,7 @@ const PLACEHOLDER: Record<string, string> = {
 };
 
 export default function ProfileModal({ open, network, onClose, onSaved }: Props) {
-  const [tab, setTab] = useState<"profile" | "memory" | "connections">("profile");
+  const [tab, setTab] = useState<"profile" | "model" | "memory" | "connections">("profile");
   const [fields, setFields] = useState<ProfileField[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -35,7 +36,9 @@ export default function ProfileModal({ open, network, onClose, onSaved }: Props)
   useEffect(() => {
     if (!open) return;
     const t = new URLSearchParams(location.search).get("tab");
-    setTab(t === "memory" || t === "connections" ? t : "profile");
+    setTab(
+      t === "memory" || t === "connections" || t === "model" ? t : "profile"
+    );
     getProfile()
       .then((r) => {
         setFields(r.fields || []);
@@ -70,6 +73,9 @@ export default function ProfileModal({ open, network, onClose, onSaved }: Props)
         <div className="settings-tabs">
           <button className={tab === "profile" ? "on" : ""} onClick={() => setTab("profile")}>
             Profile
+          </button>
+          <button className={tab === "model" ? "on" : ""} onClick={() => setTab("model")}>
+            Model
           </button>
           <button className={tab === "memory" ? "on" : ""} onClick={() => setTab("memory")}>
             Memory
@@ -120,6 +126,10 @@ export default function ProfileModal({ open, network, onClose, onSaved }: Props)
               </button>
             </div>
           </>
+        ) : tab === "model" ? (
+          <div className="settings-connections">
+            <ModelPanel />
+          </div>
         ) : tab === "memory" ? (
           <div className="settings-connections">
             <MemoryPanel />

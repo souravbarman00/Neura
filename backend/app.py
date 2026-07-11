@@ -40,6 +40,183 @@ BUILTIN_TITLES = {"neura": "Neura", "agent_network_designer": "Network Designer"
 # Networks that are served but not user-facing.
 HIDDEN_NETWORKS = {"memory_compressor", "network_builder"}
 
+# ------------------------------------------------------------------ LLM providers
+LLM_CONFIG_FILE = ROOT / "config" / "llm_config.hocon"
+
+# The three providers Neura can run on. Anthropic + OpenAI are native neuro-san
+# classes (model picked by "model_name" from its registry); Mistral is wired via
+# its LangChain class directly (model picked by "model"). Each maps to an env key.
+LLM_PROVIDERS: dict[str, dict] = {
+    "anthropic": {
+        "label": "Claude (Anthropic)",
+        "class": "anthropic",
+        "model_field": "model_name",
+        "env_key": "ANTHROPIC_API_KEY",
+    },
+    "openai": {
+        "label": "OpenAI (GPT)",
+        "class": "openai",
+        "model_field": "model_name",
+        "env_key": "OPENAI_API_KEY",
+    },
+    "mistral": {
+        "label": "Mistral AI",
+        "class": "langchain_mistralai.chat_models.ChatMistralAI",
+        "model_field": "model",
+        "env_key": "MISTRAL_API_KEY",
+    },
+}
+# class value -> provider id (for reading the active provider back out of the hocon)
+_CLASS_TO_PROVIDER = {v["class"]: k for k, v in LLM_PROVIDERS.items()}
+
+# Mistral has no neuro-san registry, so we curate its model list (la Plateforme).
+MISTRAL_MODELS = [
+    "mistral-large-latest",
+    "mistral-medium-latest",
+    "mistral-small-latest",
+    "magistral-medium-latest",
+    "magistral-small-latest",
+    "ministral-8b-latest",
+    "ministral-3b-latest",
+    "codestral-latest",
+    "pixtral-large-latest",
+    "open-mistral-nemo",
+]
+
+_LLM_MODELS_CACHE: dict[str, list[str]] = {}
+
+
+def _registry_models() -> dict[str, list[str]]:
+    """Friendly model aliases the installed neuro-san actually supports, by provider.
+    Grounds the UI dropdowns so we never offer a model the runtime can't build."""
+    if _LLM_MODELS_CACHE:
+        return _LLM_MODELS_CACHE
+    out: dict[str, list[str]] = {"anthropic": [], "openai": [], "mistral": list(MISTRAL_MODELS)}
+    try:
+        from neuro_san.internals.run_context.langchain.llms.default_llm_factory import (
+            DefaultLlmFactory,
+        )
+
+        f = DefaultLlmFactory()
+        f.load()
+        infos = f.llm_infos
+        meta = {"classes", "default_config"}
+
+        def rclass(k: str):
+            e = infos.get(k)
+            if not isinstance(e, dict):
+                return None
+            if "class" in e:
+                return e["class"]
+            t = e.get("use_model_name")
+            return infos.get(t, {}).get("class") if isinstance(infos.get(t), dict) else None
+
+        def is_alias(k: str):
+            e = infos.get(k)
+            return isinstance(e, dict) and set(e.keys()) <= {"use_model_name"}
+
+        for prov in ("anthropic", "openai"):
+            out[prov] = sorted(
+                k for k in infos if k not in meta and is_alias(k) and rclass(k) == prov
+            )
+    except Exception:  # noqa: BLE001 — best effort; fall back to curated below
+        pass
+    # Safety nets if the registry scan came up empty for a native provider.
+    if not out["anthropic"]:
+        out["anthropic"] = ["claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"]
+    if not out["openai"]:
+        out["openai"] = ["gpt-5.4", "gpt-5.4-mini", "gpt-4o", "o3-mini"]
+    _LLM_MODELS_CACHE.update(out)
+    return out
+
+
+def _valid_model(provider: str, model: str) -> bool:
+    """Mistral accepts any non-empty model (user-class path); native providers must
+    name a model the registry knows."""
+    if not model:
+        return False
+    if provider == "mistral":
+        return True
+    try:
+        from neuro_san.internals.run_context.langchain.llms.default_llm_factory import (
+            DefaultLlmFactory,
+        )
+
+        f = DefaultLlmFactory()
+        f.load()
+        return model in f.llm_infos
+    except Exception:  # noqa: BLE001
+        return model in _registry_models().get(provider, [])
+
+
+def _env_has(key: str) -> bool:
+    """Whether an API key is already saved (env or .env) — checked, never returned."""
+    if os.environ.get(key):
+        return True
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if s.startswith("#") or "=" not in s:
+                continue
+            k, v = s.split("=", 1)
+            if k.strip() == key and v.strip():
+                return True
+    return False
+
+
+def _read_active_llm() -> dict:
+    """Current provider + model from config/llm_config.hocon."""
+    provider, model = "anthropic", None
+    try:
+        from pyhocon import ConfigFactory
+
+        lc = ConfigFactory.parse_file(str(LLM_CONFIG_FILE)).get("llm_config", {})
+        cls = lc.get("class", "anthropic")
+        provider = _CLASS_TO_PROVIDER.get(cls, "anthropic")
+        model = lc.get("model_name", None) or lc.get("model", None)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"provider": provider, "model": model}
+
+
+def _render_llm_hocon(active: str, model: str, temperature: float = 0.2) -> str:
+    """Regenerate config/llm_config.hocon with `active` provider live and the other
+    two kept as documented, commented presets."""
+    def block(pid: str, mdl: str, commented: bool) -> str:
+        p = LLM_PROVIDERS[pid]
+        pre = "    # " if commented else "    "
+        lines = [
+            f'{pre}"llm_config": {{',
+            f'{pre}    "class": "{p["class"]}",',
+            f'{pre}    "{p["model_field"]}": "{mdl}",',
+            f'{pre}    "temperature": {temperature}',
+            f"{pre}}}",
+        ]
+        return "\n".join(lines)
+
+    defaults = {"anthropic": "claude-sonnet-4-5", "openai": "gpt-5.4", "mistral": "mistral-large-latest"}
+    order = [active] + [p for p in ("anthropic", "openai", "mistral") if p != active]
+    header = (
+        "{\n"
+        "    # LLM for every agent in the Neura network. Managed by the Settings → Model\n"
+        "    # tab in the UI (POST /api/llm). Edit there, or swap the active block below.\n"
+        "    #\n"
+        "    #   Anthropic / OpenAI: native neuro-san classes (use \"model_name\").\n"
+        "    #   Mistral: wired via ChatMistralAI (uses \"model\").\n\n"
+    )
+    parts = [header]
+    for i, pid in enumerate(order):
+        mdl = model if pid == active else defaults[pid]
+        label = LLM_PROVIDERS[pid]["label"]
+        tag = "Active" if i == 0 else "Preset"
+        parts.append(f"    # --- {tag}: {label} ---\n")
+        parts.append(block(pid, mdl, commented=(i != 0)) + "\n\n")
+    return "".join(parts).rstrip() + "\n}\n"
+
+
+def _write_llm_config(provider: str, model: str) -> None:
+    LLM_CONFIG_FILE.write_text(_render_llm_hocon(provider, model), encoding="utf-8")
+
 
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj)}\n\n"
@@ -735,7 +912,8 @@ def _network_details_map(name: str) -> dict:
         return {}
 
     try:
-        model = conf.get("llm_config", {}).get("model_name", None)
+        _lc = conf.get("llm_config", {})
+        model = _lc.get("model_name", None) or _lc.get("model", None)
     except Exception:  # noqa: BLE001
         model = None
     if not model:
@@ -743,8 +921,8 @@ def _network_details_map(name: str) -> dict:
         try:
             from pyhocon import ConfigFactory as _CF
 
-            llm = _CF.parse_file(str(spawn.ROOT / "config" / "llm_config.hocon"))
-            model = llm.get("llm_config", {}).get("model_name", None)
+            llm = _CF.parse_file(str(spawn.ROOT / "config" / "llm_config.hocon")).get("llm_config", {})
+            model = llm.get("model_name", None) or llm.get("model", None)
         except Exception:  # noqa: BLE001
             model = None
 
@@ -893,6 +1071,62 @@ def _restart_runtime() -> None:
         start_new_session=True,
         cwd=str(ROOT),
     )
+
+
+# ------------------------------------------------------------------ LLM provider API
+@app.get("/api/llm")
+async def get_llm() -> dict:
+    """Active provider/model + the model catalog and which API keys are already set.
+    API key values are never returned — only whether each is configured."""
+    models = _registry_models()
+    active = _read_active_llm()
+    providers = []
+    for pid, p in LLM_PROVIDERS.items():
+        providers.append(
+            {
+                "id": pid,
+                "label": p["label"],
+                "env_key": p["env_key"],
+                "models": models.get(pid, []),
+                "key_set": _env_has(p["env_key"]),
+            }
+        )
+    # Fill in a sensible default model for the active provider if none is set.
+    if not active.get("model"):
+        opts = models.get(active["provider"], [])
+        active["model"] = opts[0] if opts else None
+    return {"active": active, "providers": providers}
+
+
+@app.post("/api/llm")
+async def set_llm(request: Request):
+    """Switch the network's LLM: write config/llm_config.hocon, save the API key to
+    .env (if provided), then reload the runtime so the new model takes effect."""
+    payload = await request.json()
+    provider = (payload.get("provider") or "").strip()
+    model = (payload.get("model") or "").strip()
+    api_key = (payload.get("api_key") or "").strip()
+
+    if provider not in LLM_PROVIDERS:
+        return JSONResponse({"error": f"unknown provider '{provider}'"}, status_code=400)
+    if not _valid_model(provider, model):
+        return JSONResponse(
+            {"error": f"model '{model}' is not valid for {provider}"}, status_code=400
+        )
+
+    p = LLM_PROVIDERS[provider]
+    # Require a key to be present (either newly supplied or already saved).
+    if api_key:
+        _write_env({p["env_key"]: api_key})
+    elif not _env_has(p["env_key"]):
+        return JSONResponse(
+            {"error": f"{p['env_key']} is required for {p['label']}"}, status_code=400
+        )
+
+    _write_llm_config(provider, model)
+    store.set_setting("llm", {"provider": provider, "model": model})
+    _restart_runtime()
+    return {"ok": True, "restarting": True, "provider": provider, "model": model}
 
 
 # --------------------------------------------------------------------- spawn

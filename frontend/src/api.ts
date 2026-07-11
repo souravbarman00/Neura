@@ -405,6 +405,35 @@ export async function saveProfile(
   ).json();
 }
 
+export interface LlmProvider {
+  id: string;
+  label: string;
+  env_key: string;
+  models: string[];
+  key_set: boolean;
+}
+export interface LlmSettings {
+  active: { provider: string; model: string | null };
+  providers: LlmProvider[];
+}
+
+export async function getLlm(): Promise<LlmSettings> {
+  return (await fetch("/api/llm")).json();
+}
+export async function saveLlm(
+  provider: string,
+  model: string,
+  apiKey?: string
+): Promise<{ ok?: boolean; restarting?: boolean; error?: string }> {
+  return (
+    await fetch("/api/llm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model, api_key: apiKey || "" }),
+    })
+  ).json();
+}
+
 export interface MemoryItem {
   topic: string;
   content: string;

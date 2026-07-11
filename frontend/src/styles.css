@@ -272,6 +272,22 @@ button { font-family: inherit; }
 .mem-row .modal-input { font-size: 13px; padding: 8px 11px; }
 .cfg-save { width: 100%; justify-content: center; }
 
+/* ---------- Model panel (Settings → Model) ---------- */
+.mp-providers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.mp-prov { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--field);
+  color: var(--fg); cursor: pointer; font-family: inherit; transition: border-color .12s, background .12s; }
+.mp-prov:hover { border-color: var(--accent); }
+.mp-prov.on { border-color: var(--accent); background: var(--panel); box-shadow: var(--shadow-sm); }
+.mp-prov-label { font-size: 13px; font-weight: 600; }
+.mp-keydot { font-size: 10.5px; color: var(--fg-muted); }
+.mp-keydot.set { color: var(--ok, #2e9e5b); }
+.mp-active { font-size: 10px; color: var(--accent); font-weight: 600; }
+.mp-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.mp-row-label { font-size: 11.5px; color: var(--fg-muted); font-family: "JetBrains Mono", monospace; }
+.mp-row select.modal-input { cursor: pointer; }
+.mp-error { color: var(--danger, #d9534f); font-size: 12px; margin-bottom: 10px; }
+
 /* ---------- Network view — live dock above the chat (agents graph + logs) ---------- */
 .netdock { flex: none; height: clamp(220px, 32vh, 380px); margin: 14px 26px 0; display: flex; flex-direction: column; background: linear-gradient(180deg, var(--elevated), var(--panel)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm); }
 .netdock.collapsed { height: auto; }
