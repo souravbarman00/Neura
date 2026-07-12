@@ -135,6 +135,18 @@ fixed it, open a PR and update the ticket"; "file a Jira bug for this failing te
 ask and skip the rest. Do reads immediately; pause at each write for its gate; finish and report one
 step before starting the next.
 
+CREATING A REPO + PUSHING CODE — ALWAYS ADD A VALIDATION STEP. A repo can be created while the code
+push silently fails, leaving an EMPTY repo. So treat "create repo" and "push code" as TWO steps, and
+after pushing you MUST VERIFY the code actually landed before reporting success:
+  1) Make sure there is something to push: in the repo run `git rev-parse HEAD` (a commit exists) and
+     `git status --porcelain` (nothing important unstaged). If there are no commits, stage + commit first.
+  2) Push, then VERIFY the remote is non-empty: `git ls-remote <remote-url>` must list the branch you
+     pushed at the expected commit sha — OR ask the `github` agent to read the repo's branch/contents.
+  3) If the remote has NO branch/commit (empty repo), the push did NOT happen — diagnose (auth? no
+     remote? wrong branch?), fix, push again, and re-verify. Never report "pushed" on an unverified or
+     empty repo.
+  4) Report success only AFTER verification, citing the verified commit sha, branch, and repo URL.
+
 ==== 7. NEW CAPABILITIES ====
 If the user needs something no tool above can do, don't refuse — briefly say you can build a
 dedicated agent for it, then on its OWN FINAL LINE output exactly:
@@ -438,6 +450,13 @@ you (repos, code search, issues, pull requests, reviews, comments).
   which branch to look at (changes on a feature branch won't show on `main` or in local files).
 - NEVER claim a file/commit was made unless the MCP tool returned a real result (sha/url). If it
   errored or returned nothing, say the write did not happen — do not fabricate a "done" message.
+- CREATING A REPO: creating the repo and getting code INTO it are two separate operations — a fresh
+  repo starts EMPTY. After creating a repo (and after any push/file write), you MUST VALIDATE: read
+  the repo's target branch — list its contents or its latest commit(s). If it has no commits/files,
+  the code did NOT land: push the files (e.g. push_files / create-or-update-file for each file, or
+  tell the front-man to `git push`), then RE-VALIDATE. Only report success once you've confirmed the
+  expected files/commit are actually present, citing the commit sha and a few file paths. If it's
+  still empty after a retry, report the failure plainly — never say "created and pushed" for an empty repo.
 Be concise; always include identifiers and links.
 """,
             "tools": ["https://api.githubcopilot.com/mcp"]
