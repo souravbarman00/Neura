@@ -118,7 +118,9 @@ export default function ResearchRadarModal({ open, theme, initialPaperId, onClos
                 <div className="radar-card-title">{p.title}</div>
                 <div className="radar-card-summary">{p.summary || p.abstract.slice(0, 160)}</div>
                 <div className="radar-card-foot">
-                  {p.skill && <span className="radar-skill">{p.skill}</span>}
+                  <span className="radar-skill">
+                    {p.skill && p.skill.toLowerCase() !== p.area.toLowerCase() ? p.skill : "Read the paper →"}
+                  </span>
                   <span className="radar-date">{p.published}</span>
                 </div>
               </button>
@@ -214,7 +216,9 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             {item.authors.length >= 5 ? " et al." : ""} · {item.published} ·{" "}
             <a href={item.url} target="_blank" rel="noreferrer">arXiv ↗</a>
           </div>
-          {item.skill && <div className="radar-detail-skill">Strengthens: {item.skill}</div>}
+          {item.skill && item.skill.toLowerCase() !== item.area.toLowerCase() && (
+            <div className="radar-detail-skill">Strengthens: {item.skill}</div>
+          )}
           <p className="radar-detail-summary">{item.summary}</p>
           <details className="radar-abstract">
             <summary>Full abstract</summary>
