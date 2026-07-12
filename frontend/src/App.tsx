@@ -79,6 +79,7 @@ export default function App() {
   const [leftTab, setLeftTab] = useState<"checklist" | "memory">("checklist");
   const [wmRefresh, setWmRefresh] = useState(0);
   const [radarOpen, setRadarOpen] = useState(false);
+  const [radarPaper, setRadarPaper] = useState<string | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
@@ -183,6 +184,10 @@ export default function App() {
     if (qp.get("build")) setBuildOpen(true);
     if (qp.get("knowledge")) setKnowledgeOpen(true);
     if (qp.get("profile")) setProfileOpen(true);
+    if (qp.get("radar") || qp.get("paper")) {
+      setRadarOpen(true);
+      if (qp.get("paper")) setRadarPaper(qp.get("paper"));
+    }
     if (qp.get("rail") === "collapsed") setRightCollapsed(true);
     if (qp.get("focus")) setFocus(true);
     if (qp.get("voice")) startVoice();
@@ -682,7 +687,11 @@ export default function App() {
       <ResearchRadarModal
         open={radarOpen}
         theme={theme === "light" ? "light" : "dark"}
-        onClose={() => setRadarOpen(false)}
+        initialPaperId={radarPaper}
+        onClose={() => {
+          setRadarOpen(false);
+          setRadarPaper(null);
+        }}
       />
 
       <div

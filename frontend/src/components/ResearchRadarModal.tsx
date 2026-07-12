@@ -13,21 +13,29 @@ import NetworkView from "./NetworkView";
 interface Props {
   open: boolean;
   theme: "light" | "dark";
+  initialPaperId?: string | null;
   onClose(): void;
 }
 
 type ChatMsg = { role: "user" | "ai"; text: string };
 
-// A stable, pretty gradient "banner" per paper (arXiv has no thumbnails) — derived
-// from the id so each paper looks distinct without any external image dependency.
-function banner(id: string): string {
+// A per-paper hue derived from the id, used *subtly* — a faint tinted header and a
+// small accent dot — so cards feel distinct without throwing saturated color.
+function hue(id: string): number {
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
-  const h2 = (h + 40) % 360;
-  return `linear-gradient(135deg, hsl(${h} 70% 45%), hsl(${h2} 70% 38%))`;
+  return h;
+}
+// Muted, dark, low-saturation header — a tasteful tinted charcoal band, not neon.
+function banner(id: string): string {
+  const h = hue(id);
+  return `linear-gradient(135deg, hsl(${h} 22% 17%), hsl(${(h + 40) % 360} 18% 12%))`;
+}
+function dot(id: string): string {
+  return `hsl(${hue(id)} 45% 55%)`;
 }
 
-export default function ResearchRadarModal({ open, theme, onClose }: Props) {
+export default function ResearchRadarModal({ open, theme, initialPaperId, onClose }: Props) {
   const [doc, setDoc] = useState<RadarDoc | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,10 +45,16 @@ export default function ResearchRadarModal({ open, theme, onClose }: Props) {
     if (!open) return;
     setLoading(true);
     getRadar()
-      .then((d) => setDoc(d))
+      .then((d) => {
+        setDoc(d);
+        if (initialPaperId) {
+          const hit = (d.items || []).find((i) => i.id === initialPaperId);
+          if (hit) setSel(hit);
+        }
+      })
       .catch(() => setDoc(null))
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, initialPaperId]);
 
   async function doRefresh() {
     setRefreshing(true);
@@ -90,19 +104,20 @@ export default function ResearchRadarModal({ open, theme, onClose }: Props) {
           <div className="radar-grid">
             {items.map((p) => (
               <button className="radar-card" key={p.id} onClick={() => setSel(p)}>
-                <div className="radar-card-banner" style={{ background: banner(p.id) }}>
-                  <span className="radar-card-area">{p.area}</span>
-                  <span className={"radar-badge " + (p.action === "try" ? "try" : "read")}>
-                    {p.action === "try" ? "🧪 Try" : "📖 Read"}
+                <div className="radar-card-top">
+                  <span className="radar-chip">
+                    <span className="radar-dot" style={{ background: dot(p.id) }} />
+                    {p.area}
+                  </span>
+                  <span className={"radar-tag " + (p.action === "try" ? "try" : "read")}>
+                    {p.action === "try" ? "Try" : "Read"}
                   </span>
                 </div>
-                <div className="radar-card-body">
-                  <div className="radar-card-title">{p.title}</div>
-                  <div className="radar-card-summary">{p.summary || p.abstract.slice(0, 160)}</div>
-                  <div className="radar-card-foot">
-                    {p.skill && <span className="radar-skill">{p.skill}</span>}
-                    <span className="radar-date">{p.published}</span>
-                  </div>
+                <div className="radar-card-title">{p.title}</div>
+                <div className="radar-card-summary">{p.summary || p.abstract.slice(0, 160)}</div>
+                <div className="radar-card-foot">
+                  {p.skill && <span className="radar-skill">{p.skill}</span>}
+                  <span className="radar-date">{p.published}</span>
                 </div>
               </button>
             ))}
@@ -179,15 +194,18 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
 
   return (
     <div className="radar-detail">
-      {/* Left: paper + chat */}
+      {/* Left: paper header (compact) + chat filling the rest, input pinned bottom */}
       <div className="radar-detail-main">
-        <div className="radar-detail-banner" style={{ background: banner(item.id) }}>
-          <span className={"radar-badge " + (item.action === "try" ? "try" : "read")}>
-            {item.action === "try" ? "🧪 Try" : "📖 Read"}
-          </span>
-          <span className="radar-detail-area">{item.area}</span>
-        </div>
-        <div className="radar-detail-head">
+        <div className="radar-detail-head" style={{ background: banner(item.id) }}>
+          <div className="radar-detail-top">
+            <span className="radar-chip">
+              <span className="radar-dot" style={{ background: dot(item.id) }} />
+              {item.area}
+            </span>
+            <span className={"radar-tag " + (item.action === "try" ? "try" : "read")}>
+              {item.action === "try" ? "Try" : "Read"}
+            </span>
+          </div>
           <h2>{item.title}</h2>
           <div className="radar-detail-meta">
             {item.authors.join(", ")}
