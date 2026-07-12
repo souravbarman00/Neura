@@ -73,6 +73,38 @@ button { font-family: inherit; }
 .home-right { flex: 1 1 0; min-width: 320px; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
 .home-right .thread { padding: 26px 6%; }
 
+/* Center-left bottom box: Checklist / Memory tabs */
+.home-tasks { display: flex; flex-direction: column; }
+.lt-tabs { display: flex; gap: 2px; padding: 6px 8px 0; flex: none; }
+.lt-tabs button { border: none; background: transparent; color: var(--fg-muted); font: inherit; font-size: 12px;
+  font-weight: 600; padding: 6px 12px; border-radius: 8px 8px 0 0; cursor: pointer; }
+.lt-tabs button.on { color: var(--fg); background: var(--field); }
+.lt-body { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 6px 4px; }
+
+/* Workflow memory panel */
+.wm { display: flex; flex-direction: column; gap: 8px; padding: 4px 8px 8px; }
+.wm-head { display: flex; align-items: center; justify-content: space-between; }
+.wm-title { font-size: 11.5px; font-weight: 700; color: var(--fg-muted); text-transform: uppercase; letter-spacing: .04em; }
+.wm-clear { border: none; background: transparent; color: var(--danger, #d9534f); font: inherit; font-size: 11px; cursor: pointer; }
+.wm-empty { font-size: 12px; line-height: 1.5; padding: 8px 2px; }
+.wm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wm-item { display: flex; align-items: center; gap: 8px; padding: 5px 7px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--panel); }
+.wm-key { flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  padding: 2px 6px; border-radius: 6px; background: var(--elevated); color: var(--fg-muted); }
+.wm-src-auto { color: #7a8; } .wm-src-user { color: var(--accent); } .wm-src-model { color: var(--fg-muted); }
+.wm-val { flex: 1 1 0; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-del { flex: none; border: none; background: transparent; color: var(--fg-muted); cursor: pointer; opacity: .6; padding: 2px; }
+.wm-del:hover { color: var(--danger, #d9534f); opacity: 1; }
+.wm-add { display: flex; gap: 6px; margin-top: 2px; }
+.wm-in { border: 1px solid var(--line); border-radius: 8px; background: var(--field); color: var(--fg); font: inherit;
+  font-size: 12.5px; padding: 6px 8px; min-width: 0; }
+.wm-in-key { flex: none; width: 62px; }
+.wm-in-val { flex: 1 1 0; }
+.wm-addbtn { flex: none; border: 1px solid var(--line); border-radius: 8px; background: var(--field); color: var(--fg);
+  cursor: pointer; padding: 0 9px; display: flex; align-items: center; }
+.wm-addbtn:disabled { opacity: .45; cursor: default; }
+
 @media (max-width: 1024px) {
   /* Stack: chat first (primary), graph + checklist below. */
   .home-split { flex-direction: column; }

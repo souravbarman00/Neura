@@ -434,6 +434,43 @@ export async function saveLlm(
   ).json();
 }
 
+export interface WorkflowMemoryEntry {
+  id: string;
+  key: string;
+  value: string;
+  source: string; // "auto" | "model" | "user"
+  ts: string;
+}
+export interface WorkflowMemoryDoc {
+  conversation_id: string;
+  title: string;
+  created: string | null;
+  updated: string | null;
+  entries: WorkflowMemoryEntry[];
+}
+export async function getWorkflowMemory(cid: string): Promise<WorkflowMemoryDoc> {
+  return (await fetch(`/api/workflow-memory/${cid}`)).json();
+}
+export async function addWorkflowMemory(
+  cid: string,
+  value: string,
+  key = "note"
+): Promise<{ ok: boolean; entry: WorkflowMemoryEntry | null }> {
+  return (
+    await fetch(`/api/workflow-memory/${cid}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value, key }),
+    })
+  ).json();
+}
+export async function deleteWorkflowMemoryEntry(cid: string, id: string): Promise<{ ok: boolean }> {
+  return (await fetch(`/api/workflow-memory/${cid}/${id}`, { method: "DELETE" })).json();
+}
+export async function clearWorkflowMemory(cid: string): Promise<{ ok: boolean }> {
+  return (await fetch(`/api/workflow-memory/${cid}`, { method: "DELETE" })).json();
+}
+
 export interface MemoryItem {
   topic: string;
   content: string;

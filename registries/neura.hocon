@@ -71,6 +71,15 @@ never re-ask for something already there. Also use the `persistent_memory` tool:
   `persistent_memory` search once, else ask the user, then store their answer.
 - Never invent memories; don't store secrets/tokens or trivial chatter.
 
+WORKFLOW MEMORY (this task only) — separate from the above. When you are running a LONG, multi-step
+workflow (e.g. Jira → code → PR, or any task spanning several turns), call `workflow_memory`
+action=append to record each important detail THE MOMENT it appears: the Jira key, the branch name,
+the PR/commit URL, a decision you made, a created resource ID. It is scoped to THIS conversation
+(one JSON per workflow) and is re-injected at the top of every turn as "(THIS WORKFLOW'S MEMORY …)",
+so you never lose track across a long chat. Read it first (it's already in your context); use those
+values directly. If the user says "remember this for the task", append it too. Don't put personal/
+durable facts here (those go to `persistent_memory`); don't store secrets.
+
 ==== 3. ANSWERING FROM DATA ====
 - Personal questions (their work, notes, projects, files, decisions): call `knowledge_search` first
   and cite the source paths. It searches THIS chat's LOCAL index first, then the GLOBAL "about me"
@@ -162,7 +171,7 @@ Put nothing after that line. Only when a genuinely new capability is needed.
                     }
                 }
             ],
-            "tools": ["knowledge_search", "ddgs_search", "web_fetch", "python_run", "codebase", "terminal", "github", "jira", "confluence", "slack", "outlook", "teams", "figma"]
+            "tools": ["knowledge_search", "ddgs_search", "web_fetch", "python_run", "workflow_memory", "codebase", "terminal", "github", "jira", "confluence", "slack", "outlook", "teams", "figma"]
         },
 
         # ---- Coded tool: read-only search over the local vector store ----
@@ -207,6 +216,24 @@ Put nothing after that line. Only when a genuinely new capability is needed.
                 }
             },
             "class": "neura.python_tool.PythonRun"
+        },
+        {
+            # ---- Workflow memory: per-conversation JSON store for the current task ----
+            "name": "workflow_memory",
+            "function": {
+                "description": "Remember important details of the CURRENT multi-step task (scoped to this conversation, saved as one JSON per workflow). Use action=append to save a key fact — a Jira key, branch name, PR/commit URL, a decision you made, or a resource ID — AS SOON AS it appears, so it survives long chats. action=read to recall them. This is separate from long-term memory about the user.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {"type": "string", "description": "append (default), read, or delete."},
+                        "key": {"type": "string", "description": "Short label, e.g. jira, branch, pr, decision, id."},
+                        "value": {"type": "string", "description": "The detail to remember (for append)."},
+                        "entry_id": {"type": "string", "description": "Entry id to delete (for delete)."}
+                    },
+                    "required": ["action"]
+                }
+            },
+            "class": "neura.workflow_memory_tool.WorkflowMemory"
         },
 
         # ---- Web search + fetch (from the shared toolbox) ----

@@ -474,6 +474,43 @@ async def memory_delete(topic: str):
     return {"ok": True}
 
 
+# --------------------------------------------------- workflow memory (per chat)
+@app.get("/api/workflow-memory/{cid}")
+async def workflow_memory_get(cid: str) -> dict:
+    from neura import workflow_memory_lib as wm
+
+    return wm.load(cid)
+
+
+@app.post("/api/workflow-memory/{cid}")
+async def workflow_memory_add(request: Request, cid: str):
+    """User adds a detail to this workflow's memory from the chat/UI."""
+    from neura import workflow_memory_lib as wm
+
+    payload = await request.json()
+    value = (payload.get("value") or "").strip()
+    key = (payload.get("key") or "note").strip() or "note"
+    if not value:
+        return JSONResponse({"error": "value required"}, status_code=400)
+    entry = wm.add(cid, value, key=key, source="user")
+    return {"ok": True, "entry": entry}
+
+
+@app.delete("/api/workflow-memory/{cid}/{entry_id}")
+async def workflow_memory_del_entry(cid: str, entry_id: str) -> dict:
+    from neura import workflow_memory_lib as wm
+
+    return {"ok": wm.delete_entry(cid, entry_id)}
+
+
+@app.delete("/api/workflow-memory/{cid}")
+async def workflow_memory_clear(cid: str) -> dict:
+    """Delete this workflow's entire memory JSON — user control once the task is done."""
+    from neura import workflow_memory_lib as wm
+
+    return {"ok": wm.delete_all(cid)}
+
+
 async def _memory_preface() -> str:
     """All of Neura's long-term memory, folded into every turn so it's ALWAYS
     grounded in the user's specific info without depending on it calling a tool."""
@@ -1231,6 +1268,8 @@ async def chat(request: Request) -> StreamingResponse:
         "knowledge_base": {"local_collection": f"chat_{conv_id}", "global_collection": "about_me"},
         # The chat's workspace folder (if any) — where the codebase sub-agent may read/edit/run.
         "workspace_path": store.get_workspace(conv_id) or "",
+        # Scopes workflow_memory to THIS conversation (one JSON per workflow).
+        "conversation_id": conv_id,
     }
 
     ctx = store.get_context(conv_id)
@@ -1259,6 +1298,16 @@ async def chat(request: Request) -> StreamingResponse:
         mem_preface = await _memory_preface()
         if mem_preface:
             send_message = f"{mem_preface}\n\n{send_message}"
+        # Fold in THIS workflow's captured details (ticket, branch, PR, decisions) so a
+        # long multi-step task keeps them even after context compaction.
+        try:
+            from neura import workflow_memory_lib as _wm
+
+            wf_preface = _wm.preface(conv_id)
+            if wf_preface:
+                send_message = f"{wf_preface}\n\n{send_message}"
+        except Exception:  # noqa: BLE001
+            pass
         if mode == "strict":
             send_message = send_message + (
                 "\n\n(Strict mode: use my own data and connected tools — knowledge_search AND "
@@ -1373,6 +1422,21 @@ async def chat(request: Request) -> StreamingResponse:
                 store.set_context(conv_id, new_ctx)
             if checklist:
                 store.set_checklist(conv_id, checklist)
+
+            # Auto-capture salient identifiers (Jira keys, PR/commit/resource URLs, branch
+            # names) from the answer + the commands that ran, into this workflow's memory.
+            # Cheap regex, no LLM cost; complements what the model saved via the tool.
+            try:
+                from neura import workflow_memory_lib as _wm
+
+                blob = answer + "\n" + "\n".join(
+                    f"{c.get('command','')} {c.get('output','')}" for c in cmd_log
+                )
+                added = _wm.auto_capture(conv_id, blob, title=title)
+                if added:
+                    yield _sse({"type": "workflow_memory", "added": added})
+            except Exception:  # noqa: BLE001
+                pass
 
             summary = await compress.maybe_compress(conv_id)
             if summary:

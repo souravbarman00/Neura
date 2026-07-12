@@ -9,6 +9,7 @@ import BuildAgentModal from "./components/BuildAgentModal";
 import KnowledgeModal from "./components/KnowledgeModal";
 import NetworkView from "./components/NetworkView";
 import TaskPanel from "./components/TaskPanel";
+import WorkflowMemoryPanel from "./components/WorkflowMemoryPanel";
 import ProfileModal from "./components/ProfileModal";
 import { listen, speak, speechSupported, type OrbState, type Speaker } from "./voice";
 import {
@@ -74,6 +75,8 @@ export default function App() {
   const [liveCommands, setLiveCommands] = useState<CommandRun[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
+  const [leftTab, setLeftTab] = useState<"checklist" | "memory">("checklist");
+  const [wmRefresh, setWmRefresh] = useState(0);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
@@ -429,6 +432,7 @@ export default function App() {
     setLiveTrace([]);
     setLiveCommands([]);
     setBusy(false);
+    setWmRefresh((n) => n + 1); // re-fetch workflow memory (turn may have captured details)
     refreshConversations();
     return finalAnswer;
   }
@@ -638,7 +642,23 @@ export default function App() {
           <div className="home-split">
             <div className="home-left">
               <div className="home-graph">{graphEl}</div>
-              <div className="home-tasks">{checklistEl}</div>
+              <div className="home-tasks">
+                <div className="lt-tabs">
+                  <button className={leftTab === "checklist" ? "on" : ""} onClick={() => setLeftTab("checklist")}>
+                    Checklist
+                  </button>
+                  <button className={leftTab === "memory" ? "on" : ""} onClick={() => setLeftTab("memory")}>
+                    Memory
+                  </button>
+                </div>
+                <div className="lt-body">
+                  {leftTab === "checklist" ? (
+                    checklistEl
+                  ) : (
+                    <WorkflowMemoryPanel conversationId={currentId} refreshKey={wmRefresh} />
+                  )}
+                </div>
+              </div>
             </div>
             <div className="home-right">
               {threadEl}
