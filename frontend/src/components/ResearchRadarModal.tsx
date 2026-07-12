@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   getRadar,
   refreshRadar,
@@ -194,7 +196,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
 
   return (
     <div className="radar-detail">
-      {/* Left: paper header (compact) + chat filling the rest, input pinned bottom */}
+      {/* Left: paper header + live agent network (like Neura) */}
       <div className="radar-detail-main">
         <div className="radar-detail-head" style={{ background: banner(item.id) }}>
           <div className="radar-detail-top">
@@ -220,6 +222,25 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
           </details>
         </div>
 
+        <div className="radar-detail-graph">
+          <NetworkView
+            open
+            floating={false}
+            focus
+            conversationId={convId.current}
+            theme={theme}
+            network="research_radar"
+            activeNodes={activeNodes}
+            activeEdges={activeEdges}
+            logs={logs}
+            busy={busy}
+            onToggle={() => {}}
+          />
+        </div>
+      </div>
+
+      {/* Right: chat about this paper (input pinned at the bottom) */}
+      <div className="radar-detail-chat">
         <div className="radar-chat">
           <div className="radar-chat-title">Ask about this paper</div>
           <div className="radar-chat-body" ref={bodyRef}>
@@ -228,9 +249,15 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
                 e.g. "Explain the method simply", "How does this relate to neuro-san?", "Is it worth trying?"
               </div>
             )}
-            {msgs.map((m, i) => (
-              <div key={i} className={"radar-msg " + m.role}>{m.text}</div>
-            ))}
+            {msgs.map((m, i) =>
+              m.role === "ai" ? (
+                <div key={i} className="radar-msg ai md">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+                </div>
+              ) : (
+                <div key={i} className="radar-msg user">{m.text}</div>
+              )
+            )}
             {busy && <div className="radar-msg ai"><span className="spin" /> thinking…</div>}
           </div>
           <div className="radar-chat-input">
@@ -244,23 +271,6 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             <button className="btn-primary" onClick={ask} disabled={busy || !q.trim()}>Ask</button>
           </div>
         </div>
-      </div>
-
-      {/* Right: the live agent network (like Neura) */}
-      <div className="radar-detail-graph">
-        <NetworkView
-          open
-          floating={false}
-          focus
-          conversationId={convId.current}
-          theme={theme}
-          network="research_radar"
-          activeNodes={activeNodes}
-          activeEdges={activeEdges}
-          logs={logs}
-          busy={busy}
-          onToggle={() => {}}
-        />
       </div>
     </div>
   );
