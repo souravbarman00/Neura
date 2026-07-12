@@ -12,9 +12,11 @@ export function useMediaQuery(query: string): boolean {
 }
 
 export function useTheme(): [string, () => void] {
-  const [theme, setTheme] = useState<string>(
-    () => localStorage.getItem("neura-theme") || document.documentElement.dataset.theme || "dark"
-  );
+  const [theme, setTheme] = useState<string>(() => {
+    const q = new URLSearchParams(location.search).get("theme");
+    if (q === "light" || q === "dark") return q;
+    return localStorage.getItem("neura-theme") || document.documentElement.dataset.theme || "dark";
+  });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("neura-theme", theme);

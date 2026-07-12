@@ -28,10 +28,14 @@ function hue(id: string): number {
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
   return h;
 }
-// Muted, dark, low-saturation header — a tasteful tinted charcoal band, not neon.
-function banner(id: string): string {
+// A tasteful, low-saturation tinted header — dark charcoal in dark mode, a soft
+// pastel wash in light mode — never a neon block.
+function banner(id: string, theme: "light" | "dark"): string {
   const h = hue(id);
-  return `linear-gradient(135deg, hsl(${h} 22% 17%), hsl(${(h + 40) % 360} 18% 12%))`;
+  const h2 = (h + 40) % 360;
+  return theme === "light"
+    ? `linear-gradient(135deg, hsl(${h} 52% 95%), hsl(${h2} 48% 92%))`
+    : `linear-gradient(135deg, hsl(${h} 22% 17%), hsl(${h2} 18% 12%))`;
 }
 function dot(id: string): string {
   return `hsl(${hue(id)} 45% 55%)`;
@@ -200,7 +204,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
     <div className="radar-detail">
       {/* Left: paper header + live agent network (like Neura) */}
       <div className="radar-detail-main">
-        <div className="radar-detail-head" style={{ background: banner(item.id) }}>
+        <div className="radar-detail-head" style={{ background: banner(item.id, theme) }}>
           <div className="radar-detail-top">
             <span className="radar-chip">
               <span className="radar-dot" style={{ background: dot(item.id) }} />
