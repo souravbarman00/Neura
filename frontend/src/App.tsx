@@ -314,7 +314,9 @@ export default function App() {
     setLogs([]);
     setLiveTrace([]);
     setLiveCommands([]);
-    setChecklist([]);
+    // Keep the existing checklist across messages — the backend persists it per
+    // conversation and only appends new steps. The stream re-emits the current
+    // plan (and any updates) so it continues instead of restarting.
     setProgress(null);
     setActiveNodes(new Set());
     setActiveEdges(new Set());

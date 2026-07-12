@@ -353,11 +353,16 @@ def _parse_command(text: str) -> dict | None:
 def _apply_checklist(checklist: list, name: str, params: dict) -> None:
     """Mutate `checklist` (list of {item,status,notes,agent}) from a checklist tool call."""
     if name == "create_checklist":
-        checklist.clear()
+        # MERGE rather than reset: a follow-up turn keeps the existing plan and only
+        # appends genuinely new steps (dedup by normalized text), preserving the
+        # status/notes of steps already tracked. This is what lets the checklist
+        # persist across messages instead of restarting each turn.
+        seen = {c["item"].strip().lower() for c in checklist}
         for it in params.get("items") or []:
             s = str(it).strip()
-            if s:
+            if s and s.lower() not in seen:
                 checklist.append({"item": s, "status": "pending", "notes": "", "agent": _infer_agent(s)})
+                seen.add(s.lower())
     elif name == "update_checklist_item":
         idx = params.get("item_index")
         if isinstance(idx, int) and 1 <= idx <= len(checklist):
@@ -1284,7 +1289,12 @@ async def chat(request: Request) -> StreamingResponse:
         sources: list = []
         new_ctx = None
         suggested = None
-        checklist: list = []  # live task-plan state from the checklist middleware
+        # Seed the task-plan from what this conversation already had, so a follow-up
+        # message continues the SAME checklist instead of restarting it. New steps get
+        # appended (see _apply_checklist create_checklist merge); statuses are preserved.
+        checklist: list = list((store.get_conversation(conv_id) or {}).get("checklist") or [])
+        if checklist:
+            yield _sse({"type": "checklist", "items": checklist})
         trace_log: list = []  # agent-to-agent talk for this answer (the "thinking")
         cmd_log: list = []    # shell commands the codebase agent ran (terminal cards)
         front = None          # front-man name (root of the origin path)
