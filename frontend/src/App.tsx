@@ -679,7 +679,11 @@ export default function App() {
         onClose={() => setRightOpen(false)}
       />
 
-      <ResearchRadarModal open={radarOpen} onClose={() => setRadarOpen(false)} />
+      <ResearchRadarModal
+        open={radarOpen}
+        theme={theme === "light" ? "light" : "dark"}
+        onClose={() => setRadarOpen(false)}
+      />
 
       <div
         className={"scrim" + ((sidebarOpen && (isMobile || focus)) || (isTablet && rightOpen) ? " show" : "")}

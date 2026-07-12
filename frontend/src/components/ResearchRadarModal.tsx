@@ -8,9 +8,11 @@ import {
   type RadarItem,
 } from "../api";
 import { Close } from "../icons";
+import NetworkView from "./NetworkView";
 
 interface Props {
   open: boolean;
+  theme: "light" | "dark";
   onClose(): void;
 }
 
@@ -25,7 +27,7 @@ function banner(id: string): string {
   return `linear-gradient(135deg, hsl(${h} 70% 45%), hsl(${h2} 70% 38%))`;
 }
 
-export default function ResearchRadarModal({ open, onClose }: Props) {
+export default function ResearchRadarModal({ open, theme, onClose }: Props) {
   const [doc, setDoc] = useState<RadarDoc | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +79,7 @@ export default function ResearchRadarModal({ open, onClose }: Props) {
         </div>
 
         {sel ? (
-          <RadarDetail item={sel} />
+          <RadarDetail item={sel} theme={theme} />
         ) : loading && !doc ? (
           <div className="muted-empty" style={{ padding: 40 }}>Scanning arXiv…</div>
         ) : items.length === 0 ? (
@@ -111,16 +113,22 @@ export default function ResearchRadarModal({ open, onClose }: Props) {
   );
 }
 
-function RadarDetail({ item }: { item: RadarItem }) {
+function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark" }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
+  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
+  const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
   const convId = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Reset the chat thread when the paper changes.
+  // Reset the chat thread + graph when the paper changes.
   useEffect(() => {
     setMsgs([]);
+    setLogs([]);
+    setActiveNodes(new Set());
+    setActiveEdges(new Set());
     convId.current = null;
     setRadarItemStatus(item.id, "read").catch(() => {});
   }, [item.id]);
@@ -135,7 +143,6 @@ function RadarDetail({ item }: { item: RadarItem }) {
     setQ("");
     setMsgs((m) => [...m, { role: "user", text: question }]);
     setBusy(true);
-    // Ground the network on THIS paper.
     const ctx =
       `(Paper context — title: "${item.title}"; arXiv: ${item.url}; ` +
       `abstract: ${item.abstract.slice(0, 1200)})\n\n${question}`;
@@ -146,9 +153,19 @@ function RadarDetail({ item }: { item: RadarItem }) {
         { network: "research_radar", conversationId: convId.current, mode: "assist" },
         {
           onConversation: (info) => (convId.current = info.id),
-          onAnswer: (t) => {
-            answer = t;
+          onTrace: (node, path) => {
+            setActiveNodes((s) => new Set(s).add(node));
+            setTimeout(() => setActiveNodes((s) => { const n = new Set(s); n.delete(node); return n; }), 1900);
+            const eids: string[] = [];
+            for (let i = 0; i + 1 < (path?.length ?? 0); i++) eids.push(`${path[i]}->${path[i + 1]}`);
+            if (eids.length) {
+              setActiveEdges((s) => { const n = new Set(s); eids.forEach((e) => n.add(e)); return n; });
+              setTimeout(() => setActiveEdges((s) => { const n = new Set(s); eids.forEach((e) => n.delete(e)); return n; }), 1900);
+            }
           },
+          onLog: (entry) => setLogs((l) => [...l, entry].slice(-300)),
+          onCommand: (c) => setLogs((l) => [...l, { kind: "command", text: `$ ${c.command} (exit ${c.exit})` }].slice(-300)),
+          onAnswer: (t) => (answer = t),
           onError: (msg) => (answer = answer || `⚠️ ${msg}`),
           onDone: () => {},
         }
@@ -162,50 +179,70 @@ function RadarDetail({ item }: { item: RadarItem }) {
 
   return (
     <div className="radar-detail">
-      <div className="radar-detail-banner" style={{ background: banner(item.id) }}>
-        <span className={"radar-badge " + (item.action === "try" ? "try" : "read")}>
-          {item.action === "try" ? "🧪 Try" : "📖 Read"}
-        </span>
-        <span className="radar-detail-area">{item.area}</span>
-      </div>
-      <div className="radar-detail-head">
-        <h2>{item.title}</h2>
-        <div className="radar-detail-meta">
-          {item.authors.join(", ")}
-          {item.authors.length >= 5 ? " et al." : ""} · {item.published} ·{" "}
-          <a href={item.url} target="_blank" rel="noreferrer">arXiv ↗</a>
+      {/* Left: paper + chat */}
+      <div className="radar-detail-main">
+        <div className="radar-detail-banner" style={{ background: banner(item.id) }}>
+          <span className={"radar-badge " + (item.action === "try" ? "try" : "read")}>
+            {item.action === "try" ? "🧪 Try" : "📖 Read"}
+          </span>
+          <span className="radar-detail-area">{item.area}</span>
         </div>
-        {item.skill && <div className="radar-detail-skill">Strengthens: {item.skill}</div>}
-        <p className="radar-detail-summary">{item.summary}</p>
-        <details className="radar-abstract">
-          <summary>Full abstract</summary>
-          <p>{item.abstract}</p>
-        </details>
+        <div className="radar-detail-head">
+          <h2>{item.title}</h2>
+          <div className="radar-detail-meta">
+            {item.authors.join(", ")}
+            {item.authors.length >= 5 ? " et al." : ""} · {item.published} ·{" "}
+            <a href={item.url} target="_blank" rel="noreferrer">arXiv ↗</a>
+          </div>
+          {item.skill && <div className="radar-detail-skill">Strengthens: {item.skill}</div>}
+          <p className="radar-detail-summary">{item.summary}</p>
+          <details className="radar-abstract">
+            <summary>Full abstract</summary>
+            <p>{item.abstract}</p>
+          </details>
+        </div>
+
+        <div className="radar-chat">
+          <div className="radar-chat-title">Ask about this paper</div>
+          <div className="radar-chat-body" ref={bodyRef}>
+            {msgs.length === 0 && (
+              <div className="muted-empty">
+                e.g. "Explain the method simply", "How does this relate to neuro-san?", "Is it worth trying?"
+              </div>
+            )}
+            {msgs.map((m, i) => (
+              <div key={i} className={"radar-msg " + m.role}>{m.text}</div>
+            ))}
+            {busy && <div className="radar-msg ai"><span className="spin" /> thinking…</div>}
+          </div>
+          <div className="radar-chat-input">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && ask()}
+              placeholder="Ask a question about this paper…"
+              disabled={busy}
+            />
+            <button className="btn-primary" onClick={ask} disabled={busy || !q.trim()}>Ask</button>
+          </div>
+        </div>
       </div>
 
-      <div className="radar-chat">
-        <div className="radar-chat-title">Ask about this paper</div>
-        <div className="radar-chat-body" ref={bodyRef}>
-          {msgs.length === 0 && (
-            <div className="muted-empty">
-              e.g. "Explain the method simply", "How does this relate to neuro-san?", "Is it worth trying?"
-            </div>
-          )}
-          {msgs.map((m, i) => (
-            <div key={i} className={"radar-msg " + m.role}>{m.text}</div>
-          ))}
-          {busy && <div className="radar-msg ai"><span className="spin" /> thinking…</div>}
-        </div>
-        <div className="radar-chat-input">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && ask()}
-            placeholder="Ask a question about this paper…"
-            disabled={busy}
-          />
-          <button className="btn-primary" onClick={ask} disabled={busy || !q.trim()}>Ask</button>
-        </div>
+      {/* Right: the live agent network (like Neura) */}
+      <div className="radar-detail-graph">
+        <NetworkView
+          open
+          floating={false}
+          focus
+          conversationId={convId.current}
+          theme={theme}
+          network="research_radar"
+          activeNodes={activeNodes}
+          activeEdges={activeEdges}
+          logs={logs}
+          busy={busy}
+          onToggle={() => {}}
+        />
       </div>
     </div>
   );
