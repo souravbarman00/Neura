@@ -350,6 +350,54 @@ def _parse_command(text: str) -> dict | None:
     return {"command": command, "exit": exit_code, "output": out}
 
 
+# Cheap "utility" model per provider for small backend tasks (checklist dedup,
+# speechify). Uses the user's ACTIVE provider first, then any provider whose key is set.
+_UTILITY_MODELS = {
+    "anthropic": ("https://api.anthropic.com/v1/messages", "claude-haiku-4-5-20251001", "ANTHROPIC_API_KEY"),
+    "openai": ("https://api.openai.com/v1/chat/completions", "gpt-4o-mini", "OPENAI_API_KEY"),
+    "mistral": ("https://api.mistral.ai/v1/chat/completions", "mistral-small-latest", "MISTRAL_API_KEY"),
+}
+
+
+async def _utility_llm(prompt: str, max_tokens: int = 500) -> str | None:
+    """Run a small prompt on a cheap model of the user's active provider — so backend
+    helpers (dedup, speechify) honor the same provider the agent network uses. Tries the
+    active provider first, then any other whose API key is set. Returns text or None."""
+    active = (_read_active_llm() or {}).get("provider", "anthropic")
+    order = [active] + [p for p in _UTILITY_MODELS if p != active]
+    for prov in order:
+        url, model, env = _UTILITY_MODELS[prov]
+        key = os.environ.get(env)
+        if not key:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                if prov == "anthropic":
+                    r = await client.post(
+                        url,
+                        headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                        json={"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
+                    )
+                    data = r.json()
+                    txt = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+                else:  # openai + mistral share the /chat/completions shape
+                    body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
+                    # OpenAI's newer models want max_completion_tokens; Mistral uses max_tokens.
+                    body["max_completion_tokens" if prov == "openai" else "max_tokens"] = max_tokens
+                    r = await client.post(
+                        url,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json=body,
+                    )
+                    data = r.json()
+                    txt = ((data.get("choices") or [{}])[0].get("message", {}).get("content") or "").strip()
+            if txt:
+                return txt
+        except Exception:  # noqa: BLE001 — try the next provider
+            continue
+    return None
+
+
 async def _semantic_new_items(existing: list[str], candidates: list[str]) -> list[str]:
     """Return only the candidate steps that are genuinely NEW — not a reworded duplicate
     of an existing step. Uses a cheap Haiku call so "Open a PR" and "Create the pull
@@ -371,9 +419,6 @@ async def _semantic_new_items(existing: list[str], candidates: list[str]) -> lis
                 seen.add(c.lower())
         return out
 
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        return _text_fallback()
     prompt = (
         "You are de-duplicating a task checklist. EXISTING steps:\n"
         + "\n".join(f"- {s}" for s in existing)
@@ -384,20 +429,13 @@ async def _semantic_new_items(existing: list[str], candidates: list[str]) -> lis
         "step already covers them), each copied VERBATIM from the candidate list. If none are new, "
         "return []. Output only the JSON array."
     )
+    txt = await _utility_llm(prompt, max_tokens=500)
+    if not txt:
+        return _text_fallback()  # no provider key available
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 500,
-                      "messages": [{"role": "user", "content": prompt}]},
-            )
-            data = r.json()
-            txt = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
-            arr = json.loads(txt[txt.find("["): txt.rfind("]") + 1])
-            allow = {c: True for c in cands}  # only accept verbatim candidates, preserve order
-            picked = [c for c in arr if isinstance(c, str) and c in allow]
-            return picked
+        arr = json.loads(txt[txt.find("["): txt.rfind("]") + 1])
+        allow = {c: True for c in cands}  # only accept verbatim candidates, preserve order
+        return [c for c in arr if isinstance(c, str) and c in allow]
     except Exception:  # noqa: BLE001
         return _text_fallback()
 
@@ -1552,8 +1590,7 @@ async def speechify(request: Request) -> dict:
     text = (payload.get("text") or "").strip()
     if not text:
         return {"text": ""}
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key or len(text) < 160:
+    if len(text) < 160:
         # Short answers don't need summarising — just clean them.
         return {"text": _speechify_fallback(text)}
     prompt = (
@@ -1563,28 +1600,9 @@ async def speechify(request: Request) -> dict:
         "or URLs; don't spell out links; first person as the assistant. Output ONLY the "
         "spoken text.\n\nREPLY:\n" + text
     )
-    try:
-        async with httpx.AsyncClient(timeout=25) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 400,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            data = r.json()
-            spoken = "".join(
-                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-            ).strip()
-            return {"text": spoken or _speechify_fallback(text)}
-    except Exception:  # noqa: BLE001
-        return {"text": _speechify_fallback(text)}
+    # Uses the user's active provider (cheap tier); deterministic clean-up if none available.
+    spoken = await _utility_llm(prompt, max_tokens=400)
+    return {"text": spoken or _speechify_fallback(text)}
 
 
 @app.get("/api/voices")
