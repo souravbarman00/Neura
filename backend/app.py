@@ -21,7 +21,7 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend import compress, nsclient, spawn, store
+from backend import compress, nsclient, research_radar, spawn, store
 from backend.watcher import manager as watch_manager
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -595,6 +595,74 @@ async def workflow_memory_clear(cid: str) -> dict:
     from neura import workflow_memory_lib as wm
 
     return {"ok": wm.delete_all(cid)}
+
+
+# ---------------------------------------------------------------- research radar
+async def _radar_enrich(papers: list[dict]) -> list[dict]:
+    """Add a plain summary + mapped skill + read/try tag to each paper, via the
+    provider-aware utility LLM (one batched call). Falls back to the abstract."""
+    def _fallback(p: dict) -> dict:
+        abs_ = " ".join((p.get("abstract") or "").split())
+        p["summary"] = abs_[:240] + ("…" if len(abs_) > 240 else "")
+        p["skill"] = p.get("area", "")
+        p["action"] = "read"
+        return p
+
+    papers = papers[:24]  # bound cost
+    if not papers:
+        return papers
+    listing = "\n".join(
+        f'{i}. "{p["title"]}" [{p.get("area","")}] :: {" ".join((p.get("abstract") or "").split())[:500]}'
+        for i, p in enumerate(papers)
+    )
+    prompt = (
+        "For each paper below, respond with a JSON object keyed by the paper's index. For each: "
+        '{"summary": a plain 2-sentence summary, "skill": the concrete skill/topic it strengthens '
+        '(<=6 words), "action": "read" for a survey/concept/position paper OR "try" for a method/'
+        "tool/technique the reader could apply}. Output ONLY the JSON object.\n\nPAPERS:\n" + listing
+    )
+    txt = await _utility_llm(prompt, max_tokens=1500)
+    if not txt:
+        return [_fallback(p) for p in papers]
+    try:
+        obj = json.loads(txt[txt.find("{"): txt.rfind("}") + 1])
+        for i, p in enumerate(papers):
+            e = obj.get(str(i)) or {}
+            p["summary"] = (e.get("summary") or "").strip() or _fallback(dict(p))["summary"]
+            p["skill"] = (e.get("skill") or p.get("area", "")).strip()
+            p["action"] = "try" if str(e.get("action", "")).lower().startswith("try") else "read"
+        return papers
+    except Exception:  # noqa: BLE001
+        return [_fallback(p) for p in papers]
+
+
+@app.get("/api/radar")
+async def radar_get(refresh: bool = False) -> dict:
+    """The cached feed. Auto-rebuilds if it wasn't generated today (daily refresh) or
+    when refresh=true is passed."""
+    doc = research_radar.load()
+    if refresh or research_radar.is_stale(doc):
+        doc = await research_radar.build(research_radar.get_areas(), _radar_enrich)
+    return doc
+
+
+@app.post("/api/radar/refresh")
+async def radar_refresh() -> dict:
+    return await research_radar.build(research_radar.get_areas(), _radar_enrich)
+
+
+@app.post("/api/radar/areas")
+async def radar_set_areas(request: Request) -> dict:
+    payload = await request.json()
+    research_radar.set_areas(payload.get("areas") or [])
+    return await research_radar.build(research_radar.get_areas(), _radar_enrich)
+
+
+@app.post("/api/radar/item/{item_id}")
+async def radar_item_status(request: Request, item_id: str) -> dict:
+    payload = await request.json()
+    status = (payload.get("status") or "read").strip()
+    return {"ok": research_radar.set_item_status(item_id, status)}
 
 
 async def _memory_preface() -> str:

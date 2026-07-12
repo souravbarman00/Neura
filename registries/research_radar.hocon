@@ -1,0 +1,74 @@
+{
+    # Shared LLM config (follows the provider chosen in Settings → Model).
+    include "config/llm_config.hocon",
+
+    "max_execution_seconds": 600000,
+    "max_steps": 100000,
+
+    "metadata": {
+        "description": "Research Radar — your personal literature scout. Tracks recent papers in your areas and answers questions about them.",
+        "tags": ["research", "arxiv", "scout", "personal"],
+        "sample_queries": [
+            "What's new in multi-agent LLM systems this week?",
+            "Summarize this paper and tell me if I should read or try it.",
+            "Which of these papers is most relevant to neuro-san?",
+            "Explain the method in arXiv 2401.01234."
+        ]
+    },
+
+    "tools": [
+        # ---- Front man: the Research Radar scout ----
+        {
+            "name": "research_radar",
+            "function": {
+                "description": "Your personal research scout — finds and explains recent papers in your areas."
+            },
+            "instructions": """
+You are the user's Research Radar — a sharp, concise literature scout for their field (AI agents:
+multi-agent systems, LLM agents, agent orchestration, tool use, RAG, and neuro-san / LEAF topics).
+
+GROUNDING — never invent papers, results, authors, dates, or arXiv ids. Everything factual must come
+from a tool result this turn. Use `arxiv_search` to find recent papers (pass a topic query) or to pull
+a specific paper (pass its arXiv id, e.g. 2401.01234). Use `web_fetch` to read a page and `ddgs_search`
+for non-arXiv context. Always cite the arXiv/URL for anything you claim.
+
+WHEN SCANNING an area: return the most recent, most relevant papers. For each, give a 2-sentence plain
+summary, the concrete SKILL/topic it strengthens, and whether it's a "read" (survey/concept/position)
+or a "try" (a method/tool/technique you could actually apply). Keep it skimmable.
+
+WHEN ASKED ABOUT A SPECIFIC PAPER: the user's message may include the paper's title, arXiv id, and
+abstract as context — use it. If you need more, `arxiv_search` by its id or `web_fetch` its page. Answer
+the exact question: method, contribution, how it relates to the user's work, limitations. Be precise and
+concise; cite the link. Offer a useful next step (e.g. "worth trying X in neuro-san because…").
+""",
+            "tools": ["arxiv_search", "web_fetch", "ddgs_search"]
+        },
+
+        # ---- arXiv search (coded tool) ----
+        {
+            "name": "arxiv_search",
+            "function": {
+                "description": "Search arXiv for recent papers by topic query, or fetch a specific paper by its arXiv id. Returns titles, authors, dates, links and abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Topic query (e.g. 'multi-agent LLM') or an arXiv id (e.g. 2401.01234)."},
+                        "max_results": {"type": "string", "description": "How many results (default 6, max 25)."}
+                    },
+                    "required": ["query"]
+                }
+            },
+            "class": "neura.arxiv_tool.ArxivSearch"
+        },
+
+        # ---- Web search + fetch (shared toolbox) ----
+        {
+            "name": "ddgs_search",
+            "toolbox": "ddgs_search"
+        },
+        {
+            "name": "web_fetch",
+            "toolbox": "web_fetch"
+        }
+    ]
+}

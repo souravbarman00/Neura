@@ -74,6 +74,9 @@ export const ExternalLink = (p: P) => (
 export const Graph = (p: P) => (
   <svg {...base} className={p.className}><circle cx="6" cy="6" r="2.4" /><circle cx="6" cy="18" r="2.4" /><circle cx="18" cy="12" r="2.4" /><path d="M8.1 7.1l7.8 3.8M8.1 16.9l7.8-3.8" /></svg>
 );
+export const Radar = (p: P) => (
+  <svg {...base} className={p.className}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" /><path d="M12 12l6-4" /></svg>
+);
 export const Files = (p: P) => (
   <svg {...base} strokeLinejoin="round" className={p.className}><path d="M13 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V9z" /><path d="M13 3v6h6" /></svg>
 );

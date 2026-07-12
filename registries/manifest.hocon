@@ -1,6 +1,8 @@
 {
     # ---- User-facing assistants ----
     "neura.hocon": true,
+    # Research Radar — personal literature scout (chattable + powers the Radar panel).
+    "research_radar.hocon": true,
     # The real agent-network designer (from neuro-san-studio / alive). Talkable + used to spawn.
     "agent_network_designer.hocon": true,
 

@@ -10,6 +10,7 @@ import KnowledgeModal from "./components/KnowledgeModal";
 import NetworkView from "./components/NetworkView";
 import TaskPanel from "./components/TaskPanel";
 import WorkflowMemoryPanel from "./components/WorkflowMemoryPanel";
+import ResearchRadarModal from "./components/ResearchRadarModal";
 import ProfileModal from "./components/ProfileModal";
 import { listen, speak, speechSupported, type OrbState, type Speaker } from "./voice";
 import {
@@ -77,6 +78,7 @@ export default function App() {
   const [progress, setProgress] = useState<number | null>(null);
   const [leftTab, setLeftTab] = useState<"checklist" | "memory">("checklist");
   const [wmRefresh, setWmRefresh] = useState(0);
+  const [radarOpen, setRadarOpen] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
@@ -628,6 +630,7 @@ export default function App() {
           onToggleFocus={() => setFocus((v) => !v)}
           canReset={!!currentId}
           onResetContext={handleResetContext}
+          onOpenRadar={() => setRadarOpen(true)}
         />
         {focus ? (
           <div className="focus-split" ref={splitRef}>
@@ -675,6 +678,8 @@ export default function App() {
         network={currentNetwork}
         onClose={() => setRightOpen(false)}
       />
+
+      <ResearchRadarModal open={radarOpen} onClose={() => setRadarOpen(false)} />
 
       <div
         className={"scrim" + ((sidebarOpen && (isMobile || focus)) || (isTablet && rightOpen) ? " show" : "")}

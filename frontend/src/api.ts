@@ -434,6 +434,54 @@ export async function saveLlm(
   ).json();
 }
 
+export interface RadarArea {
+  label: string;
+  query: string;
+}
+export interface RadarItem {
+  id: string;
+  title: string;
+  authors: string[];
+  published: string;
+  url: string;
+  abstract: string;
+  area: string;
+  summary?: string;
+  skill?: string;
+  action?: string; // "read" | "try"
+  status?: string; // "new" | "read" | "dismissed"
+}
+export interface RadarDoc {
+  generated: string | null;
+  day: string | null;
+  areas: RadarArea[];
+  items: RadarItem[];
+}
+export async function getRadar(refresh = false): Promise<RadarDoc> {
+  return (await fetch(`/api/radar${refresh ? "?refresh=true" : ""}`)).json();
+}
+export async function refreshRadar(): Promise<RadarDoc> {
+  return (await fetch("/api/radar/refresh", { method: "POST" })).json();
+}
+export async function setRadarAreas(areas: RadarArea[]): Promise<RadarDoc> {
+  return (
+    await fetch("/api/radar/areas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ areas }),
+    })
+  ).json();
+}
+export async function setRadarItemStatus(id: string, status: string): Promise<{ ok: boolean }> {
+  return (
+    await fetch(`/api/radar/item/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+  ).json();
+}
+
 export interface WorkflowMemoryEntry {
   id: string;
   key: string;

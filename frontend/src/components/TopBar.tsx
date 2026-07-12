@@ -1,4 +1,4 @@
-import { Menu, Lock, Cloud, Panel, Graph, Eye, Focus, Reset } from "../icons";
+import { Menu, Lock, Cloud, Panel, Graph, Eye, Focus, Reset, Radar } from "../icons";
 import type { WatchStatus } from "../api";
 
 type Mode = "strict" | "assist";
@@ -22,6 +22,7 @@ interface Props {
   onToggleFocus(): void;
   canReset?: boolean;
   onResetContext(): void;
+  onOpenRadar(): void;
 }
 
 export default function TopBar({
@@ -43,6 +44,7 @@ export default function TopBar({
   onToggleFocus,
   canReset,
   onResetContext,
+  onOpenRadar,
 }: Props) {
   const watching = !!watch?.watching;
   const reindexing = !!watch?.reindexing;
@@ -96,6 +98,10 @@ export default function TopBar({
           <Reset />
         </button>
       )}
+
+      <button className="iconbtn" onClick={onOpenRadar} title="Research Radar — latest papers in your areas">
+        <Radar />
+      </button>
 
       <button className="iconbtn" onClick={onShowNetwork} title="Show/hide the agent graph">
         <Graph />
