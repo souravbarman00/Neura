@@ -84,6 +84,19 @@ def add(
     return entry
 
 
+def get_checklist(conv_id: str) -> List[Dict[str, Any]]:
+    """The workflow's task-plan, stored alongside its memory in the same JSON."""
+    return list(load(conv_id).get("checklist") or [])
+
+
+def set_checklist(conv_id: str, items: List[Dict[str, Any]]) -> None:
+    doc = load(conv_id)
+    if doc.get("created") is None:
+        doc["created"] = _now()
+    doc["checklist"] = items or []
+    _save(doc)
+
+
 def delete_entry(conv_id: str, entry_id: str) -> bool:
     doc = load(conv_id)
     before = len(doc["entries"])

@@ -350,19 +350,67 @@ def _parse_command(text: str) -> dict | None:
     return {"command": command, "exit": exit_code, "output": out}
 
 
-def _apply_checklist(checklist: list, name: str, params: dict) -> None:
+async def _semantic_new_items(existing: list[str], candidates: list[str]) -> list[str]:
+    """Return only the candidate steps that are genuinely NEW — not a reworded duplicate
+    of an existing step. Uses a cheap Haiku call so "Open a PR" and "Create the pull
+    request" don't become two entries; falls back to normalized-text dedup if the model
+    isn't available."""
+    cands = [str(c).strip() for c in candidates if str(c).strip()]
+    if not cands:
+        return []
+    existing = [str(e).strip() for e in existing if str(e).strip()]
+    if not existing:
+        return cands
+
+    def _text_fallback() -> list[str]:
+        seen = {e.lower() for e in existing}
+        out = []
+        for c in cands:
+            if c.lower() not in seen:
+                out.append(c)
+                seen.add(c.lower())
+        return out
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        return _text_fallback()
+    prompt = (
+        "You are de-duplicating a task checklist. EXISTING steps:\n"
+        + "\n".join(f"- {s}" for s in existing)
+        + "\n\nCANDIDATE new steps:\n"
+        + "\n".join(f"- {c}" for c in cands)
+        + "\n\nSome candidates may be reworded versions of an existing step (same intent). "
+        "Return a JSON array containing ONLY the candidates that are genuinely NEW (no existing "
+        "step already covers them), each copied VERBATIM from the candidate list. If none are new, "
+        "return []. Output only the JSON array."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 500,
+                      "messages": [{"role": "user", "content": prompt}]},
+            )
+            data = r.json()
+            txt = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+            arr = json.loads(txt[txt.find("["): txt.rfind("]") + 1])
+            allow = {c: True for c in cands}  # only accept verbatim candidates, preserve order
+            picked = [c for c in arr if isinstance(c, str) and c in allow]
+            return picked
+    except Exception:  # noqa: BLE001
+        return _text_fallback()
+
+
+async def _apply_checklist(checklist: list, name: str, params: dict) -> None:
     """Mutate `checklist` (list of {item,status,notes,agent}) from a checklist tool call."""
     if name == "create_checklist":
-        # MERGE rather than reset: a follow-up turn keeps the existing plan and only
-        # appends genuinely new steps (dedup by normalized text), preserving the
-        # status/notes of steps already tracked. This is what lets the checklist
-        # persist across messages instead of restarting each turn.
-        seen = {c["item"].strip().lower() for c in checklist}
-        for it in params.get("items") or []:
-            s = str(it).strip()
-            if s and s.lower() not in seen:
-                checklist.append({"item": s, "status": "pending", "notes": "", "agent": _infer_agent(s)})
-                seen.add(s.lower())
+        # MERGE, and use AI to decide what's genuinely new: a follow-up turn keeps the
+        # existing plan and only appends steps not already covered (even if reworded),
+        # preserving the status/notes of steps already tracked.
+        existing_items = [c["item"] for c in checklist]
+        for s in await _semantic_new_items(existing_items, params.get("items") or []):
+            checklist.append({"item": s, "status": "pending", "notes": "", "agent": _infer_agent(s)})
     elif name == "update_checklist_item":
         idx = params.get("item_index")
         if isinstance(idx, int) and 1 <= idx <= len(checklist):
@@ -1211,13 +1259,17 @@ async def get_conversation(cid: str):
     conv = store.get_conversation(cid)
     if not conv:
         return JSONResponse({"error": "not found"}, status_code=404)
+    from neura import workflow_memory_lib as _wm
+
     return {
         "id": conv["id"],
         "title": conv["title"],
         "summary": conv["summary"],
         "workspace_path": conv.get("workspace_path", ""),
         "local_kb_chunks": _kb_count(f"chat_{cid}"),
-        "checklist": conv.get("checklist", []),
+        # Checklist now lives in the workflow JSON (alongside workflow memory), with the
+        # SQLite column kept as a fallback for chats created before this change.
+        "checklist": _wm.get_checklist(cid) or conv.get("checklist", []),
         "messages": conv["messages"],
     }
 
@@ -1237,6 +1289,12 @@ async def delete_conversation(cid: str) -> dict:
         from neura.knowledge_base import KnowledgeBase
 
         KnowledgeBase.drop(f"chat_{cid}")  # remove this chat's local workspace index
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from neura import workflow_memory_lib as _wm
+
+        _wm.delete_all(cid)  # remove this workflow's memory + checklist JSON
     except Exception:  # noqa: BLE001
         pass
     return {"ok": True}
@@ -1341,7 +1399,9 @@ async def chat(request: Request) -> StreamingResponse:
         # Seed the task-plan from what this conversation already had, so a follow-up
         # message continues the SAME checklist instead of restarting it. New steps get
         # appended (see _apply_checklist create_checklist merge); statuses are preserved.
-        checklist: list = list((store.get_conversation(conv_id) or {}).get("checklist") or [])
+        from neura import workflow_memory_lib as _wm
+
+        checklist: list = _wm.get_checklist(conv_id)
         if checklist:
             yield _sse({"type": "checklist", "items": checklist})
         trace_log: list = []  # agent-to-agent talk for this answer (the "thinking")
@@ -1371,7 +1431,7 @@ async def chat(request: Request) -> StreamingResponse:
                     name = struct.get("invoked_agent_name")
                     params = struct.get("params") or {}
                     if name in ("create_checklist", "update_checklist_item", "edit_checklist_item"):
-                        _apply_checklist(checklist, name, params)
+                        await _apply_checklist(checklist, name, params)
                         yield _sse({"type": "checklist", "items": checklist})
 
                 if rtype == "AGENT_TOOL_RESULT":
@@ -1421,7 +1481,7 @@ async def chat(request: Request) -> StreamingResponse:
             if new_ctx is not None:
                 store.set_context(conv_id, new_ctx)
             if checklist:
-                store.set_checklist(conv_id, checklist)
+                _wm.set_checklist(conv_id, checklist)
 
             # Auto-capture salient identifiers (Jira keys, PR/commit/resource URLs, branch
             # names) from the answer + the commands that ran, into this workflow's memory.
