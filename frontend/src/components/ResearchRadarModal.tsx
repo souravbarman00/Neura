@@ -107,11 +107,13 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
+  const [expanded, setExpanded] = useState(false); // paper/dock fills the full left side
   const convId = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Reset the chat thread + graph when the paper changes.
   useEffect(() => {
+    setExpanded(false);
     setMsgs([]);
     setLogs([]);
     setActiveNodes(new Set());
@@ -167,7 +169,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
   return (
     <div className="radar-detail">
       {/* Left: paper header + live agent network (like Neura) */}
-      <div className="radar-detail-main">
+      <div className={"radar-detail-main" + (expanded ? " expanded" : "")}>
         <div className="radar-detail-head" style={{ background: banner(item.id, theme) }}>
           <div className="radar-detail-top">
             <span className="radar-chip">
@@ -177,6 +179,14 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             <span className={"radar-tag " + (item.action === "try" ? "try" : "read")}>
               {item.action === "try" ? "Try" : "Read"}
             </span>
+            <span className="grow" />
+            <button
+              className="radar-expand"
+              onClick={() => setExpanded((v) => !v)}
+              title={expanded ? "Show paper details" : "Expand paper to full height"}
+            >
+              {expanded ? "Collapse ⤡" : "Expand ⤢"}
+            </button>
           </div>
           <h2>{item.title}</h2>
           <div className="radar-detail-meta">
