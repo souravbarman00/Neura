@@ -116,8 +116,9 @@ button { font-family: inherit; }
 .radar-grid { flex: 1 1 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 14px; padding: 10px 2px; align-content: start; }
 .radar-card { position: relative; overflow: hidden; text-align: left; border: 1px solid var(--line); border-radius: 18px;
-  background: var(--panel); cursor: pointer; color: var(--fg); display: flex; flex-direction: column; gap: 11px;
-  padding: 17px 18px 15px; min-height: 176px; transition: border-color .16s, transform .14s, box-shadow .16s; }
+  background: linear-gradient(162deg, hsl(var(--rc-hue, 220) 42% 52% / .06), transparent 46%), var(--panel);
+  cursor: pointer; color: var(--fg); display: flex; flex-direction: column; gap: 11px;
+  padding: 16px 17px 14px; min-height: 190px; transition: border-color .16s, transform .14s, box-shadow .16s; }
 .radar-card::before { content: ""; position: absolute; top: -45%; right: -18%; width: 190px; height: 190px; pointer-events: none;
   background: radial-gradient(circle, hsl(var(--rc-hue, 220) 70% 55% / .16), transparent 70%); opacity: 0; transition: opacity .2s; }
 .radar-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 14px 34px rgba(0,0,0,.22); }
@@ -128,12 +129,14 @@ button { font-family: inherit; }
 .radar-card:hover .radar-open { opacity: 1; transform: translateX(0); }
 .radar-arrow { transition: transform .16s; }
 .radar-card:hover .radar-arrow { transform: translateX(3px); }
-.radar-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.radar-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 550; color: var(--fg-soft);
-  background: var(--field); border: 1px solid var(--line); padding: 3px 10px 3px 8px; border-radius: 20px;
-  max-width: 72%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.radar-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.radar-tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; border: 1px solid transparent; }
+.radar-head { display: flex; align-items: center; gap: 10px; }
+.radar-icon { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  color: hsl(var(--rc-hue, 220) 62% 62%); background: hsl(var(--rc-hue, 220) 55% 52% / .14);
+  border: 1px solid hsl(var(--rc-hue, 220) 55% 55% / .22); }
+.radar-headtext { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.radar-cat { font-size: 11.5px; font-weight: 600; color: var(--fg-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radar-hdate { font-size: 10.5px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.radar-tag { flex: none; align-self: flex-start; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; border: 1px solid transparent; }
 .radar-tag.try { color: #d09242; background: color-mix(in srgb, #d09242 14%, transparent); border-color: color-mix(in srgb, #d09242 26%, transparent); }
 .radar-tag.read { color: #6b97da; background: color-mix(in srgb, #6b97da 13%, transparent); border-color: color-mix(in srgb, #6b97da 24%, transparent); }
 .radar-card-title { font-size: 15.5px; font-weight: 600; line-height: 1.38; letter-spacing: -.012em; color: var(--fg);
@@ -142,7 +145,7 @@ button { font-family: inherit; }
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; height: 4.86em; }
 .radar-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto;
   padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-.radar-skill { font-size: 11px; color: var(--accent); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .9; }
+.radar-skill { font-size: 11px; color: var(--fg-muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .radar-date { font-size: 11px; color: var(--fg-muted); flex: none; font-variant-numeric: tabular-nums; }
 
 /* detail: paper header (compact) + chat filling the rest with input pinned bottom, graph on the right */
