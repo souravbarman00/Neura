@@ -18,6 +18,7 @@ interface Props {
   logs: { kind: string; text: string }[];
   busy: boolean;
   onToggle(): void;
+  paperUrl?: string; // when set, a "Paper" tab (embedded PDF) replaces the Code tab
 }
 
 interface Win {
@@ -50,11 +51,13 @@ export default function NetworkView({
   logs,
   busy,
   onToggle,
+  paperUrl,
 }: Props) {
-  const [tab, setTab] = useState<"agents" | "logs" | "code">("agents");
+  const [tab, setTab] = useState<"agents" | "logs" | "code" | "paper">("agents");
   useEffect(() => {
     if (!focus && tab === "code") setTab("agents"); // Code tab only exists in focus mode
-  }, [focus, tab]);
+    if (!paperUrl && tab === "paper") setTab("agents");
+  }, [focus, paperUrl, tab]);
   useEffect(() => {
     if (focus && new URLSearchParams(location.search).get("code")) setTab("code");
   }, [focus]);
@@ -161,8 +164,12 @@ export default function NetworkView({
           <button className={tab === "logs" ? "on" : ""} onClick={() => setTab("logs")}>
             Logs {logs.length > 0 && <span className="tabcount">{logs.length}</span>}
           </button>
-          {focus && (
-            <button className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>Code</button>
+          {paperUrl ? (
+            <button className={tab === "paper" ? "on" : ""} onClick={() => setTab("paper")}>Paper</button>
+          ) : (
+            focus && (
+              <button className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>Code</button>
+            )
           )}
         </div>
         <div className="grow" />
@@ -181,7 +188,12 @@ export default function NetworkView({
         </button>
       </div>
 
-      {open && tab === "code" ? (
+      {open && tab === "paper" && paperUrl ? (
+        <div className="netpaper">
+          <iframe src={paperUrl} title="paper" />
+          <a className="netpaper-open" href={paperUrl} target="_blank" rel="noreferrer">Open PDF ↗</a>
+        </div>
+      ) : open && tab === "code" ? (
         <div className="netcode">
           <CodeView conversationId={conversationId ?? null} theme={theme ?? "dark"} />
         </div>

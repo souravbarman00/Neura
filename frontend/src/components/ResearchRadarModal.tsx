@@ -207,6 +207,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             logs={logs}
             busy={busy}
             onToggle={() => {}}
+            paperUrl={`https://arxiv.org/pdf/${item.id}`}
           />
         </div>
       </div>
