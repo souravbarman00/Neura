@@ -196,6 +196,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
 
         <div className="radar-detail-graph">
           <NetworkView
+            key={item.id}
             open
             floating={false}
             focus

@@ -53,7 +53,7 @@ export default function NetworkView({
   onToggle,
   paperUrl,
 }: Props) {
-  const [tab, setTab] = useState<"agents" | "logs" | "code" | "paper">("agents");
+  const [tab, setTab] = useState<"agents" | "logs" | "code" | "paper">(paperUrl ? "paper" : "agents");
   useEffect(() => {
     if (!focus && tab === "code") setTab("agents"); // Code tab only exists in focus mode
     if (!paperUrl && tab === "paper") setTab("agents");
@@ -160,16 +160,15 @@ export default function NetworkView({
           <span className="live-dot" /> LIVE
         </span>
         <div className="nettabs">
+          {paperUrl && (
+            <button className={tab === "paper" ? "on" : ""} onClick={() => setTab("paper")}>Paper</button>
+          )}
           <button className={tab === "agents" ? "on" : ""} onClick={() => setTab("agents")}>Agents</button>
           <button className={tab === "logs" ? "on" : ""} onClick={() => setTab("logs")}>
             Logs {logs.length > 0 && <span className="tabcount">{logs.length}</span>}
           </button>
-          {paperUrl ? (
-            <button className={tab === "paper" ? "on" : ""} onClick={() => setTab("paper")}>Paper</button>
-          ) : (
-            focus && (
-              <button className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>Code</button>
-            )
+          {!paperUrl && focus && (
+            <button className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>Code</button>
           )}
         </div>
         <div className="grow" />
