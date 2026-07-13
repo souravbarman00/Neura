@@ -115,10 +115,19 @@ button { font-family: inherit; }
 
 .radar-grid { flex: 1 1 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 14px; padding: 10px 2px; align-content: start; }
-.radar-card { text-align: left; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); cursor: pointer;
-  color: var(--fg); display: flex; flex-direction: column; gap: 11px; padding: 17px 18px 15px; min-height: 172px;
-  transition: border-color .16s, transform .14s, box-shadow .16s; }
-.radar-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 12px 30px rgba(0,0,0,.20); }
+.radar-card { position: relative; overflow: hidden; text-align: left; border: 1px solid var(--line); border-radius: 18px;
+  background: var(--panel); cursor: pointer; color: var(--fg); display: flex; flex-direction: column; gap: 11px;
+  padding: 17px 18px 15px; min-height: 176px; transition: border-color .16s, transform .14s, box-shadow .16s; }
+.radar-card::before { content: ""; position: absolute; top: -45%; right: -18%; width: 190px; height: 190px; pointer-events: none;
+  background: radial-gradient(circle, hsl(var(--rc-hue, 220) 70% 55% / .16), transparent 70%); opacity: 0; transition: opacity .2s; }
+.radar-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 14px 34px rgba(0,0,0,.22); }
+.radar-card:hover::before { opacity: 1; }
+.radar-card > * { position: relative; }
+.radar-open { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 650; color: var(--accent);
+  opacity: 0; transform: translateX(-4px); transition: opacity .16s, transform .16s; flex: none; }
+.radar-card:hover .radar-open { opacity: 1; transform: translateX(0); }
+.radar-arrow { transition: transform .16s; }
+.radar-card:hover .radar-arrow { transform: translateX(3px); }
 .radar-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .radar-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 550; color: var(--fg-soft);
   background: var(--field); border: 1px solid var(--line); padding: 3px 10px 3px 8px; border-radius: 20px;

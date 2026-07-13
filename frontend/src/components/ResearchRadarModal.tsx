@@ -11,6 +11,8 @@ import {
 } from "../api";
 import { Close } from "../icons";
 import NetworkView from "./NetworkView";
+import RadarCard from "./RadarCard";
+import { dot, banner } from "./radarColors";
 
 interface Props {
   open: boolean;
@@ -20,26 +22,6 @@ interface Props {
 }
 
 type ChatMsg = { role: "user" | "ai"; text: string };
-
-// A per-paper hue derived from the id, used *subtly* — a faint tinted header and a
-// small accent dot — so cards feel distinct without throwing saturated color.
-function hue(id: string): number {
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
-  return h;
-}
-// A tasteful, low-saturation tinted header — dark charcoal in dark mode, a soft
-// pastel wash in light mode — never a neon block.
-function banner(id: string, theme: "light" | "dark"): string {
-  const h = hue(id);
-  const h2 = (h + 40) % 360;
-  return theme === "light"
-    ? `linear-gradient(135deg, hsl(${h} 52% 95%), hsl(${h2} 48% 92%))`
-    : `linear-gradient(135deg, hsl(${h} 22% 17%), hsl(${h2} 18% 12%))`;
-}
-function dot(id: string): string {
-  return `hsl(${hue(id)} 45% 55%)`;
-}
 
 export default function ResearchRadarModal({ open, theme, initialPaperId, onClose }: Props) {
   const [doc, setDoc] = useState<RadarDoc | null>(null);
@@ -109,25 +91,7 @@ export default function ResearchRadarModal({ open, theme, initialPaperId, onClos
         ) : (
           <div className="radar-grid">
             {items.map((p) => (
-              <button className="radar-card" key={p.id} onClick={() => setSel(p)}>
-                <div className="radar-card-top">
-                  <span className="radar-chip">
-                    <span className="radar-dot" style={{ background: dot(p.id) }} />
-                    {p.area}
-                  </span>
-                  <span className={"radar-tag " + (p.action === "try" ? "try" : "read")}>
-                    {p.action === "try" ? "Try" : "Read"}
-                  </span>
-                </div>
-                <div className="radar-card-title">{p.title}</div>
-                <div className="radar-card-summary">{p.summary || p.abstract.slice(0, 160)}</div>
-                <div className="radar-card-foot">
-                  <span className="radar-skill">
-                    {p.skill && p.skill.toLowerCase() !== p.area.toLowerCase() ? p.skill : "Read the paper →"}
-                  </span>
-                  <span className="radar-date">{p.published}</span>
-                </div>
-              </button>
+              <RadarCard key={p.id} item={p} onOpen={() => setSel(p)} />
             ))}
           </div>
         )}
