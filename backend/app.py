@@ -31,6 +31,7 @@ ENV_FILE = ROOT / ".env"
 NEURA_SERVER_URL = os.environ.get("NEURA_SERVER_URL", "http://localhost:8099")
 NEURA_NETWORK = os.environ.get("NEURA_NETWORK", "neura")
 TTS_URL = os.environ.get("TTS_URL", "http://localhost:8900")
+STT_URL = os.environ.get("STT_URL", "http://localhost:8901")
 
 app = FastAPI(title="Neura")
 store.init_db()
@@ -649,6 +650,20 @@ async def radar_get(refresh: bool = False) -> dict:
 @app.post("/api/radar/refresh")
 async def radar_refresh() -> dict:
     return await research_radar.build(research_radar.get_areas(), _radar_enrich)
+
+
+@app.get("/api/radar/paper")
+async def radar_paper(id: str) -> dict:
+    """Fetch one paper by arXiv id/URL (the 'paste a link' flow) → an enriched item,
+    without touching the saved feed."""
+    p = await research_radar.fetch_one(id)
+    if not p:
+        return {"item": None, "error": "No arXiv paper found for that link/id."}
+    try:
+        enriched = await _radar_enrich([p])
+        return {"item": enriched[0] if enriched else p}
+    except Exception:  # noqa: BLE001 — enrichment is best-effort
+        return {"item": p}
 
 
 @app.post("/api/radar/areas")
@@ -1415,15 +1430,18 @@ async def chat(request: Request) -> StreamingResponse:
     sly_data = payload.get("sly_data") or {}
     mode = payload.get("mode", "strict")
     network = payload.get("network") or "neura"
+    # Optional caller-supplied title (e.g. the Research Radar sends the paper as the
+    # session title). Falls back to deriving one from the message.
+    title = (payload.get("title") or "").strip()
 
     # Ensure a conversation exists.
     is_new = False
     if not conv_id or not store.get_conversation(conv_id):
-        conv_id = store.create_conversation(_title_from(message), network=network)
+        conv_id = store.create_conversation(title or _title_from(message), network=network)
         is_new = True
     store.add_message(conv_id, "user", message)
     if store.message_count(conv_id) == 1:
-        store.rename_conversation(conv_id, _title_from(message))
+        store.rename_conversation(conv_id, title or _title_from(message))
 
     # Knowledge scoping: this chat's own index (local) + the global "about me" index.
     # knowledge_search reads these from sly_data and searches local-first.
@@ -1616,6 +1634,27 @@ async def chat(request: Request) -> StreamingResponse:
 
 
 # ---------------------------------------------------------------- voice
+@app.post("/api/stt")
+async def stt(request: Request) -> Response:
+    """Proxy raw mic audio (webm/opus, wav, …) to the local Whisper STT service and
+    return its {"text", "language", "duration"} JSON. Forwards bytes as-is."""
+    audio = await request.body()
+    if not audio:
+        return Response(content=json.dumps({"text": "", "error": "empty audio"}),
+                        media_type="application/json", status_code=400)
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                f"{STT_URL}/api/stt",
+                content=audio,
+                headers={"content-type": request.headers.get("content-type", "application/octet-stream")},
+            )
+            return Response(content=r.content, media_type="application/json", status_code=r.status_code)
+    except Exception as exc:  # noqa: BLE001
+        return Response(content=json.dumps({"text": "", "error": f"STT unavailable: {exc}"}),
+                        media_type="application/json", status_code=503)
+
+
 @app.post("/api/tts")
 async def tts(request: Request) -> Response:
     payload = await request.json()

@@ -55,6 +55,9 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Id of the answer currently being produced — the ONLY message that gets the
+  // typewriter reveal. History/user messages (never this id) render instantly.
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [busy, setBusy] = useState(false);
@@ -208,6 +211,7 @@ export default function App() {
     setCurrentNetwork(name);
     setCurrentId(null);
     setMessages([]);
+    setAnimatingId(null);
     setSources([]);
     setChecklist([]);
     setProgress(null);
@@ -221,6 +225,7 @@ export default function App() {
     setChecklist([]);
     setProgress(null);
     setAutoApprove(false);
+    setAnimatingId(null); // loaded history renders instantly, never types out
     try {
       const c = await getConversation(id);
       setCurrentId(c.id);
@@ -248,6 +253,7 @@ export default function App() {
 
   function newChat() {
     setAutoApprove(false);
+    setAnimatingId(null);
     setCurrentId(null);
     setMessages([]);
     setSources([]);
@@ -334,6 +340,7 @@ export default function App() {
     setActivity(currentNetwork === "neura" ? "Searching your knowledge…" : "Working…");
 
     const aiId = nextId();
+    setAnimatingId(aiId); // this turn's answer types out; nothing else does
     let created = false;
     let liveSources: Source[] = [];
     const trace: AgentMsg[] = [];
@@ -548,6 +555,14 @@ export default function App() {
       onToggle={() => setNetOpen((v) => !v)}
     />
   );
+  // User-message avatar initials, derived from the saved profile name (falls back
+  // to a neutral "Me" when no name is set) — no more hardcoded initials.
+  const userInitials = (() => {
+    const parts = (profile.name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "Me";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  })();
   const threadEl = (
     <Thread
       messages={messages}
@@ -555,7 +570,11 @@ export default function App() {
       liveTrace={liveTrace}
       liveCommands={liveCommands}
       busy={busy}
+      animatingId={animatingId}
+      userInitials={userInitials}
       onApprove={handleApprove}
+      autoApprove={autoApprove}
+      onRevertAuto={() => setAutoApprove(false)}
       onQuick={send}
       onBuild={(desc) => {
         setBuildInitial(desc);

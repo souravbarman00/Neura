@@ -293,43 +293,53 @@ interface ListenOpts {
 }
 
 export function speechSupported(): boolean {
-  return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  // Whisper STT only needs mic capture + MediaRecorder — available in every modern
+  // browser (no longer Chrome/Edge-only like the old Web Speech API path).
+  return (
+    typeof MediaRecorder !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function"
+  );
 }
 
-/** Listen to the mic (Web Speech API) and stream a transcript; the mic also feeds
- *  an AnalyserNode so the orb reacts while you talk. */
+// Silence-detection / capture tuning (reliability knobs).
+const MAX_UTTERANCE_MS = 20000; // hard cap on one turn
+const SILENCE_MS = 1300; // trailing silence that ends the turn
+const MIN_LISTEN_MS = 800; // never auto-stop before this (avoids instant cutoff)
+const SPEECH_RMS = 0.015; // RMS above this counts as speech
+
+/** Record the mic, then transcribe with the local Whisper STT service (`/api/stt`)
+ *  — accurate, offline, and browser-agnostic. The mic feeds an AnalyserNode so the
+ *  orb pulses AND so we can auto-end the turn on trailing silence (hands-free), just
+ *  like the old recogniser did. `stop()` cancels the turn without transcribing. */
 export function listen(opts: ListenOpts = {}): Speaker {
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SR) {
+  if (!speechSupported()) {
     opts.onUnsupported?.();
     opts.onState?.("idle");
     return { stop() {} };
   }
+
   let stream: MediaStream | null = null;
   let actx: AudioContext | null = null;
-  let finalText = "";
-  let done = false;
+  let recorder: MediaRecorder | null = null;
+  let raf = 0;
+  let cancelled = false; // stop() was called → discard, don't transcribe
+  let ending = false; // a finalize is already in flight
+  let hasSpoken = false;
+  let spokeAt = 0;
+  const startedAt = (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const chunks: BlobPart[] = [];
 
-  const recog = new SR();
-  recog.lang = "en-IN"; // recognise Indian-accented English
-  recog.interimResults = true;
-  recog.continuous = false;
+  const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
-  opts.onState?.("listening");
-  navigator.mediaDevices
-    .getUserMedia({ audio: true })
-    .then((s) => {
-      stream = s;
-      actx = new AudioContext();
-      const src = actx.createMediaStreamSource(s);
-      const an = actx.createAnalyser();
-      an.fftSize = 256;
-      src.connect(an);
-      opts.onAnalyser?.(an);
-    })
-    .catch(() => {});
+  const pickMime = (): string => {
+    const cands = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    for (const m of cands) if ((MediaRecorder as any).isTypeSupported?.(m)) return m;
+    return "";
+  };
 
-  const cleanup = () => {
+  const teardown = () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
     stream?.getTracks().forEach((t) => t.stop());
     try {
       actx?.close();
@@ -339,37 +349,123 @@ export function listen(opts: ListenOpts = {}): Speaker {
     opts.onAnalyser?.(null);
   };
 
-  recog.onresult = (e: any) => {
-    let t = "";
-    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-    finalText = t;
-    opts.onPartial?.(t.trim());
-  };
-  recog.onerror = () => {};
-  recog.onend = () => {
-    if (done) return;
-    done = true;
-    cleanup();
-    const t = finalText.trim();
-    if (t) opts.onFinal?.(t);
-    else opts.onState?.("idle");
+  // Natural end (silence / max duration): stop the recorder → onstop → transcribe.
+  const endTurn = () => {
+    if (ending || cancelled) return;
+    ending = true;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    try {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch {
+      /* ignore */
+    }
   };
 
-  try {
-    recog.start();
-  } catch {
-    /* already started */
-  }
+  const transcribe = async () => {
+    teardown();
+    const blob = new Blob(chunks, { type: recorder?.mimeType || "audio/webm" });
+    if (!blob.size) {
+      opts.onState?.("idle");
+      return;
+    }
+    opts.onState?.("thinking");
+    try {
+      const r = await fetch("/api/stt", {
+        method: "POST",
+        headers: { "content-type": blob.type || "application/octet-stream" },
+        body: blob,
+      });
+      const data = await r.json().catch(() => ({ text: "" }));
+      const text = ((data && data.text) || "").trim();
+      if (text) {
+        opts.onPartial?.(text);
+        opts.onFinal?.(text);
+      } else {
+        opts.onState?.("idle");
+      }
+    } catch {
+      opts.onState?.("idle");
+    }
+  };
+
+  const monitor = (an: AnalyserNode) => {
+    const buf = new Uint8Array(an.fftSize);
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      const t = now();
+      if (rms > SPEECH_RMS) {
+        hasSpoken = true;
+        spokeAt = t;
+      }
+      const elapsed = t - startedAt;
+      if (elapsed > MIN_LISTEN_MS && hasSpoken && t - spokeAt > SILENCE_MS) {
+        endTurn();
+        return;
+      }
+      if (elapsed > MAX_UTTERANCE_MS) {
+        endTurn();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  };
+
+  opts.onState?.("listening");
+  navigator.mediaDevices
+    .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+    .then((s) => {
+      if (cancelled) {
+        s.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      stream = s;
+      actx = new AudioContext();
+      const src = actx.createMediaStreamSource(s);
+      const an = actx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an);
+      opts.onAnalyser?.(an);
+
+      const mime = pickMime();
+      recorder = mime ? new MediaRecorder(s, { mimeType: mime }) : new MediaRecorder(s);
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        if (cancelled) {
+          teardown();
+          return;
+        }
+        void transcribe();
+      };
+      recorder.start();
+      monitor(an);
+    })
+    .catch(() => {
+      opts.onUnsupported?.();
+      opts.onState?.("idle");
+      teardown();
+    });
 
   return {
     stop() {
-      done = true;
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
       try {
-        recog.abort();
+        if (recorder && recorder.state !== "inactive") recorder.stop();
       } catch {
         /* ignore */
       }
-      cleanup();
+      teardown();
       opts.onState?.("idle");
     },
   };

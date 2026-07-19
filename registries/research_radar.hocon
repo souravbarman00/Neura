@@ -6,13 +6,13 @@
     "max_steps": 100000,
 
     "metadata": {
-        "description": "Research Radar — your personal literature scout. Tracks recent papers in your areas and answers questions about them.",
+        "description": "Research Radar — your personal literature scout. Tracks recent papers in your areas and answers questions about them, with related-work, code, full-text, and worked-example helpers.",
         "tags": ["research", "arxiv", "scout", "personal"],
         "sample_queries": [
             "What's new in multi-agent LLM systems this week?",
             "Summarize this paper and tell me if I should read or try it.",
-            "Which of these papers is most relevant to neuro-san?",
-            "Explain the method in arXiv 2401.01234."
+            "What builds on this paper, and is there code?",
+            "Explain the method in arXiv 2401.01234 with a worked example."
         ]
     },
 
@@ -21,28 +21,139 @@
         {
             "name": "research_radar",
             "function": {
-                "description": "Your personal research scout — finds and explains recent papers in your areas."
+                "description": "Your personal research scout — finds and explains recent papers in your areas, and can dig into related work, code, full text, and methods."
             },
             "instructions": """
-You are the user's Research Radar — a sharp, concise literature scout for their field (AI agents:
-multi-agent systems, LLM agents, agent orchestration, tool use, RAG, and neuro-san / LEAF topics).
+You are the user's Research Radar — a sharp, concise literature scout. You scan for recent papers and
+answer questions about them, delegating to specialist helpers when a question calls for depth.
 
-GROUNDING — never invent papers, results, authors, dates, or arXiv ids. Everything factual must come
-from a tool result this turn. Use `arxiv_search` to find recent papers (pass a topic query) or to pull
-a specific paper (pass its arXiv id, e.g. 2401.01234). Use `web_fetch` to read a page and `ddgs_search`
-for non-arXiv context. Always cite the arXiv/URL for anything you claim.
+GROUNDING — never invent papers, results, authors, dates, arXiv ids, citation counts, or links.
+Everything factual must come from a tool/helper result THIS turn, and you cite the arXiv/URL.
 
-WHEN SCANNING an area: return the most recent, most relevant papers. For each, give a 2-sentence plain
-summary, the concrete SKILL/topic it strengthens, and whether it's a "read" (survey/concept/position)
-or a "try" (a method/tool/technique you could actually apply). Keep it skimmable.
+YOUR OWN TOOLS (use directly):
+- `arxiv_search` — find recent papers by topic query, or pull a specific paper by its arXiv id.
+- `ddgs_search` / `web_fetch` — general web context for non-arXiv facts.
 
-WHEN ASKED ABOUT A SPECIFIC PAPER: the user's message may include the paper's title, arXiv id, and
-abstract as context — use it. If you need more, `arxiv_search` by its id or `web_fetch` its page. Answer
-the exact question: method, contribution, how it relates to the user's work, limitations. Be precise and
-concise; cite the link. Offer a useful next step (e.g. "worth trying X in neuro-san because…").
+DELEGATE to a helper (pass the user's full question + the paper's title/arXiv id/abstract as `inquiry`,
+then relay its answer) when the question needs:
+- `related_work` — citations, impact, TL;DR, references, related papers, or "what builds on this / prior
+  art / how influential is it" (Semantic Scholar).
+- `code_finder` — "is there code / an implementation / how do I run it" — finds the official repo or
+  Papers-with-Code entry and setup steps.
+- `deep_read` — anything needing the FULL paper, not just the abstract: a specific section, the exact
+  method/algorithm, experimental setup, numbers/results, or limitations.
+- `method_explainer` — to work through the math/complexity/algorithm with real numbers and a worked
+  example (runs Python to ground it).
+
+WHEN SCANNING an area: return the most recent, most relevant papers — each with a 2-sentence plain
+summary, the concrete SKILL it strengthens, and a "read" (survey/concept/position) vs "try"
+(method/tool) tag. Keep it skimmable.
+WHEN ASKED ABOUT A SPECIFIC PAPER: answer the exact question precisely, pulling in a helper if it adds
+real value, and finish with a useful next step. Be concise; always cite links.
 """,
-            "tools": ["arxiv_search", "web_fetch", "ddgs_search"]
+            "middleware": [
+                # Runtime provenance — creator credit lives in Python (encoded), not here.
+                { "class": "middleware.creator_signature_middleware.CreatorSignatureMiddleware" }
+            ],
+            "tools": ["arxiv_search", "related_work", "code_finder", "deep_read", "method_explainer", "web_fetch", "ddgs_search"]
         },
+
+        # ---- Helper: related work, citations & impact (Semantic Scholar) ----
+        {
+            "name": "related_work",
+            "function": {
+                "description": "Related work, citations, impact and TL;DR for a paper via Semantic Scholar: what cites it, its references, related papers, and how influential it is.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {"type": "string", "description": "The paper (arXiv id or title) and what to find — citations, references, related work, impact."}
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You surface a paper's scholarly context via the `scholar` tool (Semantic Scholar; free, no key).
+- For a known paper (arXiv id or exact title): call `scholar` with action="paper" and the id/title —
+  report its citation count + influential citations, the TL;DR, key references, and any open-access
+  PDF / code link it returns.
+- To find related papers on a topic: call `scholar` with action="search" and the query — report the
+  top related papers by citation with years.
+Summarize clearly with titles, years, counts and links. Never invent numbers — report only what
+`scholar` returns; if it finds nothing, say so.
+""",
+            "tools": ["scholar"]
+        },
+
+        # ---- Helper: find the paper's code / reproduction (web) ----
+        {
+            "name": "code_finder",
+            "function": {
+                "description": "Find a paper's official code / implementation (GitHub, Papers-with-Code) and how to run it.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {"type": "string", "description": "The paper title / arXiv id to find an implementation for."}
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You locate a paper's code. Use `ddgs_search` to find it — try queries like '<title> github',
+'<title> official code', 'paperswithcode <title>' — then `web_fetch` the most likely repo/PwC page to
+confirm it matches the paper. Report: the repo URL (and whether it looks official vs a re-implementation),
+the language/framework, stars if visible, and a short quick-start (install + run) if the README shows one.
+If you can't find a credible implementation, say so plainly — do NOT invent a repo URL.
+""",
+            "tools": ["ddgs_search", "web_fetch"]
+        },
+
+        # ---- Helper: read the FULL paper text (arXiv PDF) ----
+        {
+            "name": "deep_read",
+            "function": {
+                "description": "Read the FULL text of a paper (arXiv PDF, not just the abstract) to answer detailed questions about sections, method, setup, results, or limitations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {"type": "string", "description": "The arXiv id/URL plus the detailed question about the paper's contents."}
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You answer detailed questions grounded in a paper's FULL text. Call `paper_read` with the paper's
+arXiv id (or URL) to pull its extracted text, then answer the exact question — the precise method /
+algorithm, experimental setup, datasets, concrete numbers/results, ablations, or stated limitations —
+quoting or closely paraphrasing the paper and citing the arXiv link. Only claim what's actually in the
+text; if the PDF has no extractable text or doesn't cover it, say so.
+""",
+            "tools": ["paper_read"]
+        },
+
+        # ---- Helper: explain the method with real computation ----
+        {
+            "name": "method_explainer",
+            "function": {
+                "description": "Explain a paper's math/algorithm/complexity concretely, using Python to work a real numeric example.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {"type": "string", "description": "The method / equation / complexity to explain, with any relevant details from the paper."}
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You make a paper's method concrete. Explain the idea in plain terms, then use `python_run` to ground
+it: implement the core computation (a loss, an update rule, a complexity/scaling estimate, a small
+worked example) and report the REAL printed output alongside the explanation. Keep code short and
+focused; never present computed numbers you didn't actually run. Relate the result back to what it
+means for the method.
+""",
+            "tools": ["python_run"]
+        },
+
+        # ================= leaf tools =================
 
         # ---- arXiv search (coded tool) ----
         {
@@ -59,6 +170,56 @@ concise; cite the link. Offer a useful next step (e.g. "worth trying X in neuro-
                 }
             },
             "class": "neura.arxiv_tool.ArxivSearch"
+        },
+
+        # ---- Semantic Scholar (coded tool) ----
+        {
+            "name": "scholar",
+            "function": {
+                "description": "Semantic Scholar lookup. action='paper' (by arXiv id or title) → citations, influential citations, TL;DR, references, open-access PDF/code; action='search' (by topic) → top related papers by citation.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "An arXiv id, exact paper title, or a topic query."},
+                        "action": {"type": "string", "description": "'paper' (default) to look up one paper, or 'search' to find related papers by topic."}
+                    },
+                    "required": ["query"]
+                }
+            },
+            "class": "neura.semantic_scholar_tool.SemanticScholar"
+        },
+
+        # ---- Full-text PDF reader (coded tool) ----
+        {
+            "name": "paper_read",
+            "function": {
+                "description": "Download an arXiv paper's PDF and return its extracted full text (no API key).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "arxiv_id": {"type": "string", "description": "The arXiv id or URL of the paper to read (e.g. 2401.01234)."}
+                    },
+                    "required": ["arxiv_id"]
+                }
+            },
+            "class": "neura.paper_read_tool.PaperRead"
+        },
+
+        # ---- Python sandbox (shared coded tool from the neura network) ----
+        {
+            "name": "python_run",
+            "function": {
+                "description": "Run Python in an isolated temp dir and return its REAL stdout/stderr + exit code. Use to compute, verify, or work a numeric example — never guess a computed answer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string", "description": "The Python source to run (print the results you need)."},
+                        "timeout": {"type": "string", "description": "Optional seconds (default 60, max 300)."}
+                    },
+                    "required": ["code"]
+                }
+            },
+            "class": "neura.python_tool.PythonRun"
         },
 
         # ---- Web search + fetch (shared toolbox) ----

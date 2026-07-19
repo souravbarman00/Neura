@@ -26,3 +26,8 @@ design/*.png
 *.wav
 .DS_Store
 *.tsbuildinfo
+
+# macOS app build artifacts (huge; rebuilt via scripts/build_standalone_app.sh)
+*.dmg
+dist-app/
+dist-standalone/

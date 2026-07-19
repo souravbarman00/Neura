@@ -1,38 +1,25 @@
 {
-    # ---------------------------------------------------------------------------
-    # Default LLM for every agent in the Neura network.
+    # LLM for every agent in the Neura network. Managed by the Settings → Model
+    # tab in the UI (POST /api/llm). Edit there, or swap the active block below.
     #
-    # Neura supports three cloud providers out of the box. To switch, comment out
-    # the active "llm_config" block below and uncomment the one you want, then set
-    # the matching API key in your .env (see .env.example).
-    #
-    #   Provider    class value                                        env key
-    #   --------    -----------------------------------------------    -----------------
-    #   Anthropic   "anthropic"  (built-in)                            ANTHROPIC_API_KEY
-    #   OpenAI      "openai"     (built-in)                            OPENAI_API_KEY
-    #   Mistral     "langchain_mistralai.chat_models.ChatMistralAI"   MISTRAL_API_KEY
-    #
-    # Anthropic and OpenAI are native neuro-san providers, so they take a
-    # "model_name" from neuro-san's model registry. Mistral is wired via its
-    # LangChain class directly, so it takes "model" (ChatMistralAI's field name).
-    # ---------------------------------------------------------------------------
+    #   Anthropic / OpenAI: native neuro-san classes (use "model_name").
+    #   Mistral: wired via ChatMistralAI (uses "model").
 
-    # --- Active: Anthropic (Claude) ---
+    # --- Active: Claude (Anthropic) ---
     "llm_config": {
         "class": "anthropic",
-        "model_name": "claude-sonnet-4-5-20250929",
+        "model_name": "claude-opus-4-5",
         "temperature": 0.2
     }
 
-    # --- OpenAI (GPT) --- requires OPENAI_API_KEY
+    # --- Preset: OpenAI (GPT) ---
     # "llm_config": {
     #     "class": "openai",
     #     "model_name": "gpt-5.4",
     #     "temperature": 0.2
     # }
 
-    # --- Mistral --- requires MISTRAL_API_KEY (pip install langchain-mistralai)
-    # ChatMistralAI reads MISTRAL_API_KEY from the environment automatically.
+    # --- Preset: Mistral AI ---
     # "llm_config": {
     #     "class": "langchain_mistralai.chat_models.ChatMistralAI",
     #     "model": "mistral-large-latest",

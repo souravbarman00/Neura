@@ -1,17 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { useEffect, useState } from "react";
 import {
   getRadar,
+  getRadarPaper,
+  listConversations,
   refreshRadar,
+  setRadarAreas,
   setRadarItemStatus,
-  streamChat,
+  type Conversation,
+  type RadarArea,
   type RadarDoc,
   type RadarItem,
 } from "../api";
 import { Close } from "../icons";
 import NetworkView from "./NetworkView";
 import RadarCard from "./RadarCard";
+import Thread from "./Thread";
+import { useChat } from "../useChat";
 import { dot, banner } from "./radarColors";
 
 interface Props {
@@ -21,13 +25,12 @@ interface Props {
   onClose(): void;
 }
 
-type ChatMsg = { role: "user" | "ai"; text: string };
-
 export default function ResearchRadarModal({ open, theme, initialPaperId, onClose }: Props) {
   const [doc, setDoc] = useState<RadarDoc | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sel, setSel] = useState<RadarItem | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +61,7 @@ export default function ResearchRadarModal({ open, theme, initialPaperId, onClos
 
   return (
     <div className="modal-scrim" onClick={onClose}>
-      <div className="modal radar-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={"modal radar-modal" + (fullscreen ? " fullscreen" : "")} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">
             {sel ? (
@@ -77,22 +80,34 @@ export default function ResearchRadarModal({ open, theme, initialPaperId, onClos
               </button>
             </div>
           )}
+          <button
+            className="radar-fs-btn"
+            onClick={() => setFullscreen((v) => !v)}
+            title={fullscreen ? "Exit full screen" : "Full screen"}
+          >
+            {fullscreen ? "⤡" : "⤢"}
+          </button>
           <button className="modal-x" onClick={onClose}><Close /></button>
         </div>
 
         {sel ? (
           <RadarDetail item={sel} theme={theme} />
-        ) : loading && !doc ? (
-          <div className="muted-empty" style={{ padding: 40 }}>Scanning arXiv…</div>
-        ) : items.length === 0 ? (
-          <div className="muted-empty" style={{ padding: 40 }}>
-            No papers yet. Hit Refresh to scan your areas.
-          </div>
         ) : (
-          <div className="radar-grid">
-            {items.map((p) => (
-              <RadarCard key={p.id} item={p} onOpen={() => setSel(p)} />
-            ))}
+          <div className="radar-body">
+            <RadarSetup doc={doc} onDoc={setDoc} onOpenPaper={setSel} />
+            {loading && !doc ? (
+              <div className="muted-empty" style={{ padding: 40 }}>Scanning arXiv…</div>
+            ) : items.length === 0 ? (
+              <div className="muted-empty" style={{ padding: 40 }}>
+                No papers yet. Add an area above (or hit Refresh) to scan.
+              </div>
+            ) : (
+              <div className="radar-grid">
+                {items.map((p) => (
+                  <RadarCard key={p.id} item={p} onOpen={() => setSel(p)} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -100,71 +115,190 @@ export default function ResearchRadarModal({ open, theme, initialPaperId, onClos
   );
 }
 
-function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark" }) {
-  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
-  const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
-  const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
-  const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
-  const [expanded, setExpanded] = useState(false); // paper/dock fills the full left side
-  const convId = useRef<string | null>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
+// Quick-add suggestions (arXiv queries tuned per area). Users can also type any area.
+const SUGGESTED: RadarArea[] = [
+  { label: "Multi-agent LLM systems", query: 'all:"multi-agent" AND all:"language model"' },
+  { label: "Agent orchestration", query: 'all:"agent orchestration" OR all:"agentic"' },
+  { label: "LLM reasoning & tool use", query: 'all:"tool use" AND all:"large language model"' },
+  { label: "Retrieval-augmented generation", query: 'all:"retrieval-augmented generation"' },
+  { label: "LLM evaluation", query: 'all:"evaluation" AND all:"large language model"' },
+  { label: "Diffusion models", query: 'all:"diffusion model"' },
+  { label: "Reinforcement learning", query: 'all:"reinforcement learning"' },
+  { label: "Speech & audio", query: 'all:"speech recognition" OR all:"text to speech"' },
+];
 
-  // Reset the chat thread + graph when the paper changes.
+/** Two ways to drive the radar: manage your areas of interest (with quick-add chips),
+ *  or paste a specific paper link to jump straight into it. */
+function RadarSetup({
+  doc,
+  onDoc,
+  onOpenPaper,
+}: {
+  doc: RadarDoc | null;
+  onDoc(d: RadarDoc): void;
+  onOpenPaper(item: RadarItem): void;
+}) {
+  const areas = doc?.areas || [];
+  const [newArea, setNewArea] = useState("");
+  const [savingAreas, setSavingAreas] = useState(false);
+  const [link, setLink] = useState("");
+  const [opening, setOpening] = useState(false);
+  const [err, setErr] = useState("");
+
+  const has = (label: string) => areas.some((a) => a.label.toLowerCase() === label.toLowerCase());
+
+  async function saveAreas(next: RadarArea[]) {
+    setSavingAreas(true);
+    try {
+      onDoc(await setRadarAreas(next));
+    } finally {
+      setSavingAreas(false);
+    }
+  }
+  const add = (a: RadarArea) => {
+    if (!has(a.label)) void saveAreas([...areas, a]);
+  };
+  const addCustom = () => {
+    const t = newArea.trim();
+    if (!t) return;
+    setNewArea("");
+    add({ label: t, query: t });
+  };
+  const remove = (label: string) => void saveAreas(areas.filter((a) => a.label !== label));
+
+  async function openPaper() {
+    const v = link.trim();
+    if (!v || opening) return;
+    setErr("");
+    setOpening(true);
+    try {
+      const r = await getRadarPaper(v);
+      if (r.item) {
+        setLink("");
+        onOpenPaper(r.item);
+      } else {
+        setErr(r.error || "No paper found for that link/id.");
+      }
+    } catch {
+      setErr("Could not fetch that paper.");
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  const suggestions = SUGGESTED.filter((s) => !has(s.label));
+
+  return (
+    <div className="radar-setup">
+      <div className="radar-setup-row">
+        <span className="radar-setup-label">Your areas</span>
+        <div className="radar-chips">
+          {areas.map((a) => (
+            <span className="radar-area-chip" key={a.label}>
+              {a.label}
+              <button onClick={() => remove(a.label)} disabled={savingAreas} title="Remove area">×</button>
+            </span>
+          ))}
+          <input
+            className="radar-area-input"
+            placeholder="add an area…"
+            value={newArea}
+            onChange={(e) => setNewArea(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addCustom()}
+            disabled={savingAreas}
+          />
+        </div>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div className="radar-setup-row">
+          <span className="radar-setup-label">Suggestions</span>
+          <div className="radar-chips">
+            {suggestions.map((s) => (
+              <button className="radar-suggest-chip" key={s.label} onClick={() => add(s)} disabled={savingAreas}>
+                + {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="radar-setup-row">
+        <span className="radar-setup-label">Open a paper</span>
+        <div className="radar-paper-open">
+          <input
+            className="radar-area-input wide"
+            placeholder="paste an arXiv link or id — e.g. 2401.01234"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && openPaper()}
+            disabled={opening}
+          />
+          <button className="btn-primary" onClick={openPaper} disabled={opening || !link.trim()}>
+            {opening ? "Opening…" : "Open"}
+          </button>
+        </div>
+      </div>
+
+      {savingAreas && (
+        <div className="radar-setup-note"><span className="spin" /> Updating your radar…</div>
+      )}
+      {err && <div className="modal-error">⚠️ {err}</div>}
+    </div>
+  );
+}
+
+function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark" }) {
+  // Reuse the SAME chat stack Neura uses (thinking animation, live-trace box, typewriter).
+  const chat = useChat({ network: "research_radar", mode: "assist", busyLabel: "Reading the paper…" });
+  const [q, setQ] = useState("");
+  const [expanded, setExpanded] = useState(false); // paper/dock fills the full left side
+  const [sessions, setSessions] = useState<Conversation[]>([]); // past chats for THIS paper
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+
+  // Sessions are research_radar conversations titled "<arxivId> · <title>" — that ties
+  // each saved chat to its paper without any schema change.
+  const sessionTitle = `${item.id} · ${item.title}`;
+  const prefix = `${item.id} · `;
+  async function refreshSessions() {
+    const all = await listConversations("research_radar").catch(() => [] as Conversation[]);
+    setSessions(all.filter((c) => c.title.startsWith(prefix)));
+  }
+
+  // On paper change: reset, load this paper's saved sessions, and resume the most recent.
   useEffect(() => {
     setExpanded(false);
-    setMsgs([]);
-    setLogs([]);
-    setActiveNodes(new Set());
-    setActiveEdges(new Set());
-    convId.current = null;
+    setSessionsOpen(false);
+    chat.reset();
     setRadarItemStatus(item.id, "read").catch(() => {});
+    let cancelled = false;
+    (async () => {
+      const all = await listConversations("research_radar").catch(() => [] as Conversation[]);
+      if (cancelled) return;
+      const mine = all.filter((c) => c.title.startsWith(prefix));
+      setSessions(mine);
+      if (mine.length) void chat.load(mine[0].id); // resume the newest (list is updated-desc)
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [msgs, busy]);
+  // The user's bubble shows the clean question; the agent also gets the paper context.
+  const withCtx = (question: string) =>
+    `(Paper context — title: "${item.title}"; arXiv: ${item.url}; ` +
+    `abstract: ${item.abstract.slice(0, 1200)})\n\n${question}`;
 
-  async function ask() {
-    const question = q.trim();
-    if (!question || busy) return;
+  function ask(text?: string) {
+    const question = (text ?? q).trim();
+    if (!question || chat.busy) return;
     setQ("");
-    setMsgs((m) => [...m, { role: "user", text: question }]);
-    setBusy(true);
-    const ctx =
-      `(Paper context — title: "${item.title}"; arXiv: ${item.url}; ` +
-      `abstract: ${item.abstract.slice(0, 1200)})\n\n${question}`;
-    let answer = "";
-    try {
-      await streamChat(
-        ctx,
-        { network: "research_radar", conversationId: convId.current, mode: "assist" },
-        {
-          onConversation: (info) => (convId.current = info.id),
-          onTrace: (node, path) => {
-            setActiveNodes((s) => new Set(s).add(node));
-            setTimeout(() => setActiveNodes((s) => { const n = new Set(s); n.delete(node); return n; }), 1900);
-            const eids: string[] = [];
-            for (let i = 0; i + 1 < (path?.length ?? 0); i++) eids.push(`${path[i]}->${path[i + 1]}`);
-            if (eids.length) {
-              setActiveEdges((s) => { const n = new Set(s); eids.forEach((e) => n.add(e)); return n; });
-              setTimeout(() => setActiveEdges((s) => { const n = new Set(s); eids.forEach((e) => n.delete(e)); return n; }), 1900);
-            }
-          },
-          onLog: (entry) => setLogs((l) => [...l, entry].slice(-300)),
-          onCommand: (c) => setLogs((l) => [...l, { kind: "command", text: `$ ${c.command} (exit ${c.exit})` }].slice(-300)),
-          onAnswer: (t) => (answer = t),
-          onError: (msg) => (answer = answer || `⚠️ ${msg}`),
-          onDone: () => {},
-        }
-      );
-    } catch {
-      answer = answer || "⚠️ Could not reach the Research Radar network.";
-    }
-    setMsgs((m) => [...m, { role: "ai", text: answer || "(no answer)" }]);
-    setBusy(false);
+    void chat.send(question, { transmit: withCtx(question), title: sessionTitle }).then(refreshSessions);
   }
+
+  const fmtDate = (t: number) =>
+    new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="radar-detail">
@@ -179,14 +313,6 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             <span className={"radar-tag " + (item.action === "try" ? "try" : "read")}>
               {item.action === "try" ? "Try" : "Read"}
             </span>
-            <span className="grow" />
-            <button
-              className="radar-expand"
-              onClick={() => setExpanded((v) => !v)}
-              title={expanded ? "Show paper details" : "Expand paper to full height"}
-            >
-              {expanded ? "Collapse ⤡" : "Expand ⤢"}
-            </button>
           </div>
           <h2>{item.title}</h2>
           <div className="radar-detail-meta">
@@ -210,39 +336,85 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
             open
             floating={false}
             focus
-            conversationId={convId.current}
+            conversationId={chat.conversationId}
             theme={theme}
             network="research_radar"
-            activeNodes={activeNodes}
-            activeEdges={activeEdges}
-            logs={logs}
-            busy={busy}
-            onToggle={() => {}}
+            activeNodes={chat.activeNodes}
+            activeEdges={chat.activeEdges}
+            logs={chat.logs}
+            busy={chat.busy}
+            onToggle={() => setExpanded((v) => !v)}
+            expanded={expanded}
             paperUrl={`https://arxiv.org/pdf/${item.id}`}
           />
         </div>
       </div>
 
-      {/* Right: chat about this paper (input pinned at the bottom) */}
+      {/* Right: the reused Neura chat panel (thinking animation + live-trace + typewriter) */}
       <div className="radar-detail-chat">
         <div className="radar-chat">
-          <div className="radar-chat-title">Ask about this paper</div>
-          <div className="radar-chat-body" ref={bodyRef}>
-            {msgs.length === 0 && (
+          <div className="radar-chat-title">
+            <span>Ask about this paper</span>
+            <div className="radar-sessions">
+              <button
+                className="radar-sessions-btn"
+                onClick={() => setSessionsOpen((v) => !v)}
+                title="Chat sessions for this paper"
+              >
+                ☰
+              </button>
+              {sessionsOpen && (
+                <>
+                  <div className="radar-sessions-scrim" onClick={() => setSessionsOpen(false)} />
+                  <div className="radar-sessions-menu">
+                    <div className="radar-sessions-hd">This paper's chats</div>
+                    {sessions.length === 0 && <div className="radar-sessions-empty">No saved chats yet</div>}
+                    {sessions.map((s) => (
+                      <button
+                        key={s.id}
+                        className={"radar-session" + (s.id === chat.conversationId ? " on" : "")}
+                        onClick={() => {
+                          void chat.load(s.id);
+                          setSessionsOpen(false);
+                        }}
+                      >
+                        <span>{fmtDate(s.updated)}</span>
+                        <span className="radar-session-count">{s.count} msg{s.count === 1 ? "" : "s"}</span>
+                      </button>
+                    ))}
+                    <div className="radar-sessions-sep" />
+                    <button
+                      className="radar-session new"
+                      onClick={() => {
+                        chat.reset();
+                        setSessionsOpen(false);
+                      }}
+                    >
+                      + New chat
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="radar-chat-thread">
+            {chat.messages.length === 0 && !chat.busy ? (
               <div className="muted-empty">
-                e.g. "Explain the method simply", "How does this relate to neuro-san?", "Is it worth trying?"
+                e.g. "Explain the method simply", "What builds on this?", "Is there code?",
+                "Explain the math with an example"
               </div>
+            ) : (
+              <Thread
+                messages={chat.messages}
+                activity={chat.activity}
+                liveTrace={chat.liveTrace}
+                liveCommands={chat.liveCommands}
+                busy={chat.busy}
+                animatingId={chat.animatingId}
+                onQuick={(t) => ask(t)}
+                onBuild={() => {}}
+              />
             )}
-            {msgs.map((m, i) =>
-              m.role === "ai" ? (
-                <div key={i} className="radar-msg ai md">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
-                </div>
-              ) : (
-                <div key={i} className="radar-msg user">{m.text}</div>
-              )
-            )}
-            {busy && <div className="radar-msg ai"><span className="spin" /> thinking…</div>}
           </div>
           <div className="radar-chat-input">
             <input
@@ -250,9 +422,9 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && ask()}
               placeholder="Ask a question about this paper…"
-              disabled={busy}
+              disabled={chat.busy}
             />
-            <button className="btn-primary" onClick={ask} disabled={busy || !q.trim()}>Ask</button>
+            <button className="btn-primary" onClick={() => ask()} disabled={chat.busy || !q.trim()}>Ask</button>
           </div>
         </div>
       </div>

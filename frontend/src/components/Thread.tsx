@@ -13,15 +13,40 @@ interface Props {
   onQuick(q: string): void;
   onBuild(desc: string): void;
   onApprove?(decision: "yes" | "no" | "always"): void;
+  autoApprove?: boolean;
+  onRevertAuto?(): void;
+  animatingId?: string | null;
+  userInitials?: string;
 }
 
 const SUGGESTIONS = ["What is Neuro SAN?", "Summarize my projects", "How are coded tools defined?"];
 
-export default function Thread({ messages, activity, liveTrace, liveCommands, busy, onQuick, onBuild, onApprove }: Props) {
+export default function Thread({ messages, activity, liveTrace, liveCommands, busy, onQuick, onBuild, onApprove, autoApprove, onRevertAuto, animatingId, userInitials }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activity, liveTrace, liveCommands]);
+
+  // Keep the live-trace box pinned to its newest line — including WHILE a line types
+  // out (content grows without a liveTrace change), via a ResizeObserver on the body.
+  const traceBoxRef = useRef<HTMLDivElement>(null);
+  const traceContentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = traceBoxRef.current;
+    const content = traceContentRef.current;
+    if (!box || !content) return;
+    const stick = () => {
+      box.scrollTop = box.scrollHeight;
+    };
+    stick();
+    const ro = new ResizeObserver(stick);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [liveTrace, activity]);
+
+  // Show a deeper window in the (now taller) box; keyBase keeps line keys stable.
+  const traceShown = (liveTrace || []).slice(-12);
+  const traceKeyBase = Math.max(0, (liveTrace?.length || 0) - traceShown.length);
 
   if (messages.length === 0) {
     return (
@@ -55,6 +80,9 @@ export default function Thread({ messages, activity, liveTrace, liveCommands, bu
           last={i === messages.length - 1}
           busy={busy}
           onApprove={onApprove}
+          onQuick={onQuick}
+          animate={!!animatingId && m.id === animatingId}
+          userInitials={userInitials}
         />
       ))}
       {liveCommands && liveCommands.length > 0 && (
@@ -75,9 +103,21 @@ export default function Thread({ messages, activity, liveTrace, liveCommands, bu
               <div className="thinking-box-head">
                 <span className="tbh-dot" /> Agents working — live trace
               </div>
-              <TraceList items={liveTrace.slice(-6)} />
+              <div className="thinking-box-body" ref={traceBoxRef}>
+                <div ref={traceContentRef}>
+                  <TraceList items={traceShown} animate keyBase={traceKeyBase} />
+                </div>
+              </div>
             </div>
           )}
+        </div>
+      )}
+      {autoApprove && (
+        <div className="auto-approve-note">
+          <span>⚡ Auto-approving actions for the rest of this chat.</span>
+          <button className="auto-approve-undo" onClick={() => onRevertAuto?.()}>
+            Turn off · ask me each time
+          </button>
         </div>
       )}
       <div ref={endRef} />

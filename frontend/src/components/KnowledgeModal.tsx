@@ -195,7 +195,7 @@ export default function KnowledgeModal(p: Props) {
 
             <div className="or-row"><span>or type absolute paths</span></div>
             <textarea className="modal-input" rows={2}
-              placeholder={"/Users/2504436/my-repo"} value={paths} onChange={(e) => setPaths(e.target.value)} />
+              placeholder={"/Users/you/my-repo"} value={paths} onChange={(e) => setPaths(e.target.value)} />
             {error && <div className="modal-error">⚠️ {error}</div>}
             <div className="modal-actions">
               <button className="btn-ghost" onClick={onClose}>Cancel</button>

@@ -57,6 +57,7 @@ export interface ChatOptions {
   mode?: "strict" | "assist";
   network?: string;
   slyData?: Record<string, unknown>;
+  title?: string; // caller-supplied conversation title (e.g. the paper for a Radar session)
 }
 
 /** Stream a chat turn from the backend SSE endpoint, dispatching typed events. */
@@ -75,6 +76,7 @@ export async function streamChat(
       mode: opts.mode ?? "strict",
       network: opts.network ?? "neura",
       sly_data: opts.slyData ?? {},
+      title: opts.title,
     }),
     signal,
   });
@@ -462,6 +464,9 @@ export async function getRadar(refresh = false): Promise<RadarDoc> {
 }
 export async function refreshRadar(): Promise<RadarDoc> {
   return (await fetch("/api/radar/refresh", { method: "POST" })).json();
+}
+export async function getRadarPaper(id: string): Promise<{ item: RadarItem | null; error?: string }> {
+  return (await fetch(`/api/radar/paper?id=${encodeURIComponent(id)}`)).json();
 }
 export async function setRadarAreas(areas: RadarArea[]): Promise<RadarDoc> {
   return (

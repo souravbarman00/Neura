@@ -14,16 +14,18 @@ interface Props {
 
 // Fields that read better as a multi-line textarea.
 const LONG = new Set(["focus", "communication_style", "about"]);
+// Neutral example hints only — the real values are whatever the user types (saved
+// per-user in their own database). Nothing here is anyone's actual profile.
 const PLACEHOLDER: Record<string, string> = {
-  name: "Sourav Barman",
-  role: "AI Engineer",
-  company: "Cognizant AI Lab",
-  team: "LEAF / neuro-san",
-  location: "Kolkata, India",
-  timezone: "IST (UTC+5:30)",
-  working_hours: "10:00–19:00",
-  focus: "Building Neura; the LEAF agent platform; dev-loop automation.",
-  communication_style: "Direct and concise. Show code and links. Skip preamble.",
+  name: "e.g. Jane Doe",
+  role: "e.g. Software Engineer",
+  company: "e.g. Acme Inc.",
+  team: "e.g. Platform",
+  location: "e.g. San Francisco, CA",
+  timezone: "e.g. PST (UTC-8)",
+  working_hours: "e.g. 09:00–17:00",
+  focus: "What you're currently working on.",
+  communication_style: "e.g. Direct and concise. Show code and links. Skip preamble.",
   about: "Anything Neura should always keep in mind about you, your projects, or how you work.",
 };
 

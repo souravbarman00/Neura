@@ -98,6 +98,16 @@ export const Stop = (p: P) => (
 export const ChevronDown = (p: P) => (
   <svg {...base} strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M6 9l6 6 6-6" /></svg>
 );
+export const Maximize = (p: P) => (
+  <svg {...base} strokeLinecap="round" strokeLinejoin="round" className={p.className}>
+    <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+  </svg>
+);
+export const Minimize = (p: P) => (
+  <svg {...base} strokeLinecap="round" strokeLinejoin="round" className={p.className}>
+    <path d="M3 8h3a2 2 0 0 0 2-2V3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M21 16h-3a2 2 0 0 0-2 2v3" />
+  </svg>
+);
 export const Eye = (p: P) => (
   <svg {...base} className={p.className}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
 );

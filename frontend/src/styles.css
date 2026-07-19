@@ -108,11 +108,30 @@ button { font-family: inherit; }
 /* ---------- Research Radar modal (near full-screen, subtle/modern) ---------- */
 /* Two-class selector so it beats the base `.modal` width regardless of bundle order. */
 .modal.radar-modal { width: 97vw; max-width: none; height: 95vh; display: flex; flex-direction: column; padding: 20px 22px; }
+.modal.radar-modal.fullscreen { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; border-radius: 0; }
+.radar-fs-btn { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--fg-soft); cursor: pointer; font-size: 15px; line-height: 1; margin-left: auto; margin-right: 4px; }
+.radar-fs-btn:hover { border-color: var(--accent); color: var(--fg); }
 .radar-head-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .radar-updated { font-size: 11.5px; color: var(--fg-muted); }
 .radar-back { border: none; background: transparent; color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; padding: 0; opacity: .75; }
 .radar-back:hover { opacity: 1; }
 
+.radar-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.radar-setup { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 12px; border-bottom: 1px solid var(--line-soft); margin-bottom: 10px; }
+.radar-setup-row { display: flex; align-items: flex-start; gap: 10px; }
+.radar-setup-label { flex: none; width: 92px; font-size: 11.5px; font-weight: 600; color: var(--fg-muted); padding-top: 7px; }
+.radar-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 0; align-items: center; }
+.radar-area-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--fg-soft); background: var(--field); border: 1px solid var(--line); border-radius: 20px; padding: 5px 6px 5px 12px; }
+.radar-area-chip button { border: none; background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 50%; }
+.radar-area-chip button:hover { color: var(--danger); }
+.radar-area-input { font-family: inherit; font-size: 12.5px; color: var(--fg); background: transparent; border: 1px dashed var(--line); border-radius: 20px; padding: 6px 12px; min-width: 130px; }
+.radar-area-input:focus { outline: none; border-color: var(--accent); }
+.radar-area-input.wide { flex: 1 1 0; border-style: solid; background: var(--field); }
+.radar-suggest-chip { font-family: inherit; font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(124, 124, 246, 0.25); border-radius: 20px; padding: 5px 12px; cursor: pointer; }
+.radar-suggest-chip:hover { filter: brightness(1.05); border-color: var(--accent); }
+.radar-suggest-chip:disabled { opacity: 0.5; cursor: default; }
+.radar-paper-open { display: flex; gap: 8px; flex: 1 1 0; }
+.radar-setup-note { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-muted); }
 .radar-grid { flex: 1 1 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 14px; padding: 10px 2px; align-content: start; }
 .radar-card { position: relative; overflow: hidden; text-align: left; border: 1px solid var(--line); border-radius: 18px;
@@ -157,13 +176,8 @@ button { font-family: inherit; }
   font: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
 .radar-expand:hover { color: var(--fg); border-color: var(--accent); }
 /* Expanded: collapse the paper header to a slim bar so the Paper/graph dock fills the left side */
-.radar-detail-main.expanded .radar-detail-head { padding: 9px 14px; margin-bottom: 10px; }
-.radar-detail-main.expanded .radar-detail-top { margin-bottom: 0; }
-.radar-detail-main.expanded .radar-detail-head h2,
-.radar-detail-main.expanded .radar-detail-meta,
-.radar-detail-main.expanded .radar-detail-skill,
-.radar-detail-main.expanded .radar-detail-summary,
-.radar-detail-main.expanded .radar-abstract { display: none; }
+/* Expand: hide the title card entirely so the paper/agent panel fills the whole left. */
+.radar-detail-main.expanded .radar-detail-head { display: none; }
 .radar-detail-head h2 { font-size: 22px; line-height: 1.28; letter-spacing: -.02em; font-weight: 640; margin: 0 0 9px; }
 .radar-detail-meta { font-size: 12.5px; color: var(--fg-muted); margin-bottom: 6px; }
 .radar-detail-meta a { color: var(--accent); }
@@ -174,8 +188,26 @@ button { font-family: inherit; }
 .radar-abstract p { line-height: 1.68; margin-top: 8px; max-width: 72ch; }
 
 .radar-chat { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
-.radar-chat-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-muted); margin-bottom: 8px; flex: none; }
+.radar-chat-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-muted); margin-bottom: 8px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Per-paper chat sessions menu (the ☰ picker). */
+.radar-sessions { position: relative; }
+.radar-sessions-btn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--fg-soft); cursor: pointer; font-size: 14px; line-height: 1; }
+.radar-sessions-btn:hover { border-color: var(--accent); color: var(--fg); }
+.radar-sessions-scrim { position: fixed; inset: 0; z-index: 5; }
+.radar-sessions-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; width: 240px; max-height: 340px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.radar-sessions-hd { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--fg-muted); padding: 6px 8px 4px; text-transform: none; }
+.radar-sessions-empty { font-size: 12px; color: var(--fg-muted); padding: 8px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.radar-session { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; font-family: inherit; font-size: 12.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--fg-soft); background: transparent; border: none; border-radius: 8px; padding: 8px 9px; cursor: pointer; }
+.radar-session:hover { background: var(--field); color: var(--fg); }
+.radar-session.on { background: var(--accent-soft); color: var(--fg); }
+.radar-session-count { font-size: 11px; color: var(--fg-muted); }
+.radar-sessions-sep { height: 1px; background: var(--line-soft); margin: 4px 2px; }
+.radar-session.new { color: var(--accent); font-weight: 600; }
 .radar-chat-body { flex: 1 1 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px; }
+/* Scroll container for the reused Neura <Thread> inside the Radar chat column. */
+.radar-chat-thread { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 2px; }
+.radar-chat-thread .thread { padding: 0; width: 100%; }
+.radar-chat-thread .thinking { padding-left: 0; max-width: none; }
 .radar-msg { max-width: 90%; font-size: 14px; line-height: 1.62; padding: 10px 14px; border-radius: 14px; }
 .radar-msg.user { align-self: flex-end; background: var(--accent); color: #fff; white-space: pre-wrap; }
 .radar-msg.ai { align-self: flex-start; background: var(--field); border: 1px solid var(--line); color: var(--fg); }
@@ -183,6 +215,9 @@ button { font-family: inherit; }
 .radar-chat-input input { flex: 1 1 0; border: 1px solid var(--line); border-radius: 12px; background: var(--field);
   color: var(--fg); font: inherit; font-size: 13.5px; padding: 11px 14px; outline: none; }
 .radar-chat-input input:focus { border-color: var(--accent); }
+/* Bigger "Ask" button (and matching taller input) in the Radar chat. */
+.radar-chat-input input { padding: 13px 16px; font-size: 14px; }
+.radar-chat-input .btn-primary { padding: 13px 30px; font-size: 15px; border-radius: 12px; }
 
 /* graph sits under the paper in the LEFT column; chat is the RIGHT column */
 .radar-detail-graph { flex: 1 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
@@ -404,6 +439,39 @@ button { font-family: inherit; }
 .ap-no { color: var(--danger); border-color: rgba(242, 100, 122, 0.35); background: rgba(242, 100, 122, 0.08); }
 .ap-no:hover { border-color: var(--danger); }
 .ap-always { color: var(--fg-muted); }
+
+/* Clickable answer options parsed from an assistant question (tap instead of type). */
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.choice-btn {
+  font-family: inherit; font-size: 12.5px; font-weight: 600; text-align: left;
+  padding: 8px 14px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg-soft);
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+.choice-btn:hover { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 8%, var(--field)); }
+
+/* Persistent notice + off-switch while "Always allow" auto-approval is active. */
+.auto-approve-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 12px 0 4px; padding: 8px 12px; border-radius: 10px;
+  font-size: 12.5px; color: var(--fg-soft);
+  border: 1px solid rgba(120, 160, 255, 0.28);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.auto-approve-undo {
+  font-family: inherit; font-size: 12px; font-weight: 600; white-space: nowrap;
+  padding: 5px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg-soft);
+}
+.auto-approve-undo:hover { border-color: var(--accent); color: var(--fg); }
+
+/* Blinking caret shown at the end of the in-flight answer while it types out. */
+.type-caret {
+  display: inline-block; width: 7px; height: 1.05em; margin-left: 2px;
+  vertical-align: text-bottom; background: var(--accent); border-radius: 1px;
+  animation: type-blink 1s steps(2, start) infinite;
+}
+@keyframes type-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 
 /* ---- Terminal command cards (CLI runs by the codebase agent) ---- */
 .live-commands { max-width: 760px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
@@ -688,7 +756,9 @@ button { font-family: inherit; }
 .thinking { align-self: center; width: 100%; max-width: 760px; margin: 0 auto; padding-left: 44px; display: flex; flex-direction: column; gap: 8px; }
 .thinking-head { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--fg-muted); }
 /* Clear TEMPORARY box for the live agent-to-agent trace (disappears when done) */
-.thinking-box { display: flex; flex-direction: column; gap: 8px; background: var(--accent-soft); border: 1px dashed rgba(124, 124, 246, 0.5); border-radius: 12px; padding: 10px 12px; max-height: 240px; overflow-y: auto; }
+.thinking-box { display: flex; flex-direction: column; gap: 8px; background: var(--accent-soft); border: 1px dashed rgba(124, 124, 246, 0.5); border-radius: 12px; padding: 10px 12px; }
+/* Only the body scrolls (header stays put); taller while thinking, auto-scrolled to newest. */
+.thinking-box-body { max-height: clamp(280px, 46vh, 560px); overflow-y: auto; }
 .thinking-box-head { display: flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
 .thinking-box-head .tbh-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 1s ease-in-out infinite; }
 

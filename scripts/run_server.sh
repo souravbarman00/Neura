@@ -6,11 +6,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # Load environment (ANTHROPIC_API_KEY, optional overrides) from .env if present.
+# Parse line-by-line (never `source` it) so a key value containing spaces,
+# parentheses or other shell-special characters can't break startup.
 if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    case "$_line" in ''|\#*) continue ;; esac
+    _key="${_line%%=*}"; _val="${_line#*=}"
+    [ "$_key" = "$_line" ] && continue          # no '=' on the line
+    export "$_key=$_val"
+  done < .env
 fi
 
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then

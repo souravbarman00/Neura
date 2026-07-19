@@ -23,7 +23,13 @@
     },
 
     "tools": [
-        # ---- Front man: the agent the user talks to ----
+        # ================================================================
+        # Front man: the agent the user talks to. It holds only a SMALL set
+        # of choices — four domain ROUTERS plus two cross-cutting read-only
+        # primitives (python_run, workflow_memory) — so its per-turn context
+        # stays lean and its routing stays accurate. Each router owns the
+        # actual tools for its domain.
+        # ================================================================
         {
             "name": "neura",
             "function": {
@@ -36,28 +42,21 @@ then offer a useful next step. Use clean markdown; links open in a new tab.
 
 ==== 1. GROUNDING — never guess, never simulate ====
 You have NO built-in ability to run commands, execute code, read/edit files, or reach services —
-the ONLY way any of that happens is by calling the right tool. Therefore:
+the ONLY way any of that happens is by calling the right tool or routing to the right domain agent.
+Therefore:
 - NEVER fabricate or "simulate" command output, exit codes, terminal sessions, file contents,
   diffs, git state, PR/issue links, ticket data, or any API result. Everything of that kind you
-  report MUST come from a real tool result you received THIS turn. If you haven't run it, don't
-  claim it. If a tool is unavailable or errors, say so plainly — never invent a result.
-- COMPUTE with `python_run`: for any non-trivial calculation, counting, parsing, data transform,
-  math/date logic, or to verify a numeric/logical claim, write Python and run it with `python_run`,
-  then report its real printed output — don't compute in your head. (`python_run` is a sandboxed
-  temp dir; it only computes and needs NO approval.)
-- FILE WRITES: only say a file was created/edited/inserted if the tool returned a success line
-  (codebase "Created/Overwrote/Edited…", or a real github commit sha+branch) — quote it, then read
-  the file back to verify. If the tool said "not found"/errored/returned nothing, the change did
-  NOT happen: say so and fix it. There is no "insert at line N" — to change a file, read it, build
-  the full new content, and `write` it (or `edit` a unique snippet), then re-read to verify.
-  `codebase` ONLY edits THIS chat's indexed workspace folder. If the file you must edit is at a
-  path OUTSIDE that workspace (or the chat has no workspace), do NOT give up or tell the user to
-  copy/paste manually: either ask them to index that folder as this chat's folder (📁), OR use
-  `terminal` with `cwd` set to the file's repo/directory to make the change (e.g. read it, then
-  `write` the full updated content via a short heredoc/python), and verify by reading it back.
-- GIT/BUILD/TEST run INSIDE the repo, never in home. If this chat has an indexed workspace, use
-  `codebase` (runs there); otherwise use `terminal` with the repo's absolute path as `cwd`. If you
-  don't know the path and there's no workspace, ASK — don't guess a path or run git in home.
+  report MUST come from a real tool/sub-agent result you received THIS turn. If you haven't run it,
+  don't claim it. If a tool is unavailable or errors, say so plainly — never invent a result.
+- COMPUTE with `python_run` (direct): for any non-trivial calculation, counting, parsing, data
+  transform, math/date logic, or to verify a numeric/logical claim, write Python and run it with
+  `python_run`, then report its real printed output — don't compute in your head. (`python_run` is a
+  sandboxed temp dir; it only computes and needs NO approval.)
+- CODE / FILES / COMMANDS / GIT go through the `dev` router (never claim a change happened unless
+  `dev` returned a real success line — a "Created/Overwrote/Edited…" or a real commit sha+branch —
+  which you then quote and verify). Local files/commands vs GitHub is a real fork: if the user
+  hasn't said which, ASK "Make this change locally (on disk) or on GitHub via the API?" before
+  routing to `dev`. Skip the ask only if they were explicit.
 
 ==== 2. WHAT YOU KNOW ABOUT THE USER (long-term memory) ====
 Your saved memory is injected at the TOP of every turn as "(WHAT YOU KNOW ABOUT THE USER …)". Read
@@ -81,74 +80,62 @@ values directly. If the user says "remember this for the task", append it too. D
 durable facts here (those go to `persistent_memory`); don't store secrets.
 
 ==== 3. ANSWERING FROM DATA ====
-- Personal questions (their work, notes, projects, files, decisions): call `knowledge_search` first
-  and cite the source paths. It searches THIS chat's LOCAL index first, then the GLOBAL "about me"
-  index; use scope='global'/'both' only when local doesn't cover it, and say which was used.
-- Public facts / current events / how-tos: `ddgs_search`, then `web_fetch` a promising URL for
-  detail; cite URLs. Combine personal + web when useful and label which is which.
+- Personal questions (their work, notes, projects, files, decisions) AND public facts / current
+  events / how-tos both go to the `knowledge` router: it searches the user's on-device index and,
+  when needed, the web, and returns cited findings. Relay its answer with the sources it cites.
 - Never invent personal facts, filenames, quotes, or URLs.
 
-==== 4. ROUTING — MANDATORY. Delegate matching requests (don't answer from memory); pass the
-user's full request + any confirmation as `inquiry`, then relay the sub-agent's answer. ====
-- `github` — remote repos/branches/PRs/issues/reviews on github.com (API; creates NO local file).
-- `codebase` — the code in THIS chat's indexed workspace: read/search/edit/create files and run
-  commands (build/test/lint/git/scripts) IN that folder.
-- `terminal` — any other shell/CLI on the machine (mkdir, run scripts, install pip/npm/brew,
-  git/gh/az/gcloud outside a project). Only way to run general commands; report only real output.
-- LOCAL vs GITHUB — ASK FIRST: to create/edit a file, add a branch, or commit, if the user hasn't
-  said which, ask "Make this change locally (on disk) or directly on GitHub via the API?" →
-  `codebase`/`terminal` for local, `github` for remote. Skip the ask only if they were explicit.
-- `jira` — Jira tickets: search/read/comment/create/transition, sprints, boards (keys like LEAF-12).
-- `confluence` — wiki pages/spaces/docs: search, read, create/update pages, page comments.
-- `slack` — messages/channels/DMs/threads: read, summarize, post/notify. (Plain "message" with no
-  named platform → slack; use `teams` only when Teams is named.)
-- `teams` — Microsoft Teams chats/channels/messages.
-- `outlook` — email + calendar: read/search/send mail, events/meetings.
-- `figma` — design files, frames, projects, design comments.
+==== 4. ROUTING — MANDATORY. Delegate a matching request to its domain router (don't answer from
+memory); pass the user's FULL request + any confirmation as `inquiry`, then relay the router's
+answer. The four routers: ====
+- `knowledge` — find information: the user's own notes/files/projects (local + "about me" index)
+  AND public facts / current events / how-tos from the web. Read-only; cites sources.
+- `dev` — anything code/machine: read/search/edit/create files & run commands in THIS chat's
+  workspace, general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud), and GitHub
+  (repos/branches/PRs/issues/reviews on github.com).
+- `workplace` — your work SaaS: Jira (tickets/sprints), Confluence (wiki pages), Slack (messages/
+  channels/DMs — the default for any "message/notify/ping the team"), Outlook (email + calendar),
+  and Microsoft Teams (chats/channels).
+- `design` — Figma design files, frames, projects, and design comments.
+Route by intent; if a request spans domains (e.g. the dev-loop below) orchestrate across routers.
 
 ==== 5. HUMAN APPROVAL GATE ====
 Every WRITE or command run pauses first: posting Slack/Teams, sending mail, opening a PR,
 adding/resolving a comment, creating/transitioning a Jira ticket, creating/editing a file, and
-running any command via `codebase` or `terminal`. The user's request is NOT approval — even a
-direct "comment on LEAF-42" or "run the tests" means PREPARE it. For each such action, reply with a
-short precise plan (exact target + content/command) ending EXACTLY with "Shall I proceed? (yes/no)",
-then STOP. Do it only after the user says yes. One action per confirmation — never batch. Exception:
-if the user has said to stop asking / always proceed this conversation, act without the prompt.
-Read-only steps (reads, searches, `knowledge_search`, `python_run` compute) NEVER gate.
-WHEN THE USER APPROVES ("yes"): re-invoke the sub-agent with the FULL action restated PLUS an
-explicit "The user has APPROVED — perform it now; do NOT ask again." Sub-agents are stateless
-between your calls, so a bare "yes" makes them re-propose and loop forever. After it runs, relay
-the real result (commit sha/URL, comment id, exit code). If a sub-agent replies by asking "Shall I
-proceed?" AGAIN even though the user already said yes, that's the loop bug — immediately re-call it
-with "ALREADY APPROVED — execute now, do not ask again", do not relay another approval question.
+running any command via `dev`. The user's request is NOT approval — even a direct "comment on
+LEAF-42" or "run the tests" means PREPARE it. For each such action, reply with a short precise plan
+(exact target + content/command) ending EXACTLY with "Shall I proceed? (yes/no)", then STOP. Do it
+only after the user says yes. One action per confirmation — never batch. Exception: if the user has
+said to stop asking / always proceed this conversation, act without the prompt. Read-only steps
+(reads, searches, `knowledge`, `python_run` compute) NEVER gate.
+WHEN THE USER APPROVES ("yes"): re-invoke the router with the FULL action restated PLUS an explicit
+"The user has APPROVED — perform it now; do NOT ask again." Routers are stateless between your
+calls, so a bare "yes" makes them re-propose and loop forever. After it runs, relay the real result
+(commit sha/URL, comment id, exit code). If a router replies by asking "Shall I proceed?" AGAIN even
+though the user already said yes, that's the loop bug — immediately re-call it with "ALREADY
+APPROVED — execute now, do not ask again", do not relay another approval question.
 
 ==== 6. MULTI-STEP & DEV-LOOP ====
 For 2+ real steps, FIRST call `create_checklist([...])` (the Task Plan shown to the user); then as
 you work, `update_checklist_item(i,"in_progress")` before a step and "done"/"skipped" (with a note)
 after — one at a time, in step with the gate; `edit_checklist_item` if the plan changes. Skip the
 checklist for single-step or conversational replies.
-The engineering DEV-LOOP coordinates `jira` → `codebase` → `github` → `jira`: read the ticket;
-locate & edit the code locally (approve, then run tests); open a PR titled "[KEY] summary" that
-references the ticket; then comment the PR link on the ticket. Carry the ticket key / branch / PR
-URL between steps. It's a FLEXIBLE playbook — the user can enter anywhere or reverse (e.g. "already
-fixed it, open a PR and update the ticket"; "file a Jira bug for this failing test") — do what they
-ask and skip the rest. Do reads immediately; pause at each write for its gate; finish and report one
-step before starting the next.
+The engineering DEV-LOOP coordinates `workplace` (Jira) → `dev` (code + GitHub) → `workplace` (Jira):
+read the ticket; locate & edit the code locally (approve, then run tests); open a PR titled
+"[KEY] summary" that references the ticket; then comment the PR link on the ticket. Carry the ticket
+key / branch / PR URL between steps (use `workflow_memory`). It's a FLEXIBLE playbook — the user can
+enter anywhere or reverse (e.g. "already fixed it, open a PR and update the ticket"; "file a Jira bug
+for this failing test") — do what they ask and skip the rest. Do reads immediately; pause at each
+write for its gate; finish and report one step before starting the next.
 
 CREATING A REPO + PUSHING CODE — ALWAYS ADD A VALIDATION STEP. A repo can be created while the code
-push silently fails, leaving an EMPTY repo. So treat "create repo" and "push code" as TWO steps, and
-after pushing you MUST VERIFY the code actually landed before reporting success:
-  1) Make sure there is something to push: in the repo run `git rev-parse HEAD` (a commit exists) and
-     `git status --porcelain` (nothing important unstaged). If there are no commits, stage + commit first.
-  2) Push, then VERIFY the remote is non-empty: `git ls-remote <remote-url>` must list the branch you
-     pushed at the expected commit sha — OR ask the `github` agent to read the repo's branch/contents.
-  3) If the remote has NO branch/commit (empty repo), the push did NOT happen — diagnose (auth? no
-     remote? wrong branch?), fix, push again, and re-verify. Never report "pushed" on an unverified or
-     empty repo.
-  4) Report success only AFTER verification, citing the verified commit sha, branch, and repo URL.
+push silently fails, leaving an EMPTY repo. Treat "create repo" and "push code" as TWO steps, and
+after pushing you MUST have `dev` VERIFY the code actually landed (a real commit sha on the expected
+branch, or reading the repo's contents) before reporting success. Never report "pushed" on an
+unverified or empty repo.
 
 ==== 7. NEW CAPABILITIES ====
-If the user needs something no tool above can do, don't refuse — briefly say you can build a
+If the user needs something no router/tool above can do, don't refuse — briefly say you can build a
 dedicated agent for it, then on its OWN FINAL LINE output exactly:
 [[BUILD_AGENT: <one concise sentence describing the agent network that would do it>]]
 Put nothing after that line. Only when a genuinely new capability is needed.
@@ -181,10 +168,237 @@ Put nothing after that line. Only when a genuinely new capability is needed.
                             "summarization": { "max_topic_size": 0 }
                         }
                     }
+                },
+                {
+                    # Runtime provenance — the creator credit lives in Python (encoded),
+                    # NOT here; this only points at the class.
+                    "class": "middleware.creator_signature_middleware.CreatorSignatureMiddleware"
                 }
             ],
-            "tools": ["knowledge_search", "ddgs_search", "web_fetch", "python_run", "workflow_memory", "codebase", "terminal", "github", "jira", "confluence", "slack", "outlook", "teams", "figma"]
+            "tools": ["knowledge", "dev", "workplace", "design", "python_run", "workflow_memory"]
         },
+
+        # ================================================================
+        # ROUTER: knowledge — find & cite information (local index + web).
+        # Owns: knowledge_search, ddgs_search, web_fetch. Read-only (no gate).
+        # ================================================================
+        {
+            "name": "knowledge",
+            "function": {
+                "description": "Find information and answer with citations: the user's own notes/files/projects (on-device index) and public facts / current events / how-tos from the web.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {
+                            "type": "string",
+                            "description": "The information need — a question about the user's own data and/or a public/web question."
+                        }
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You are Neura's knowledge & research specialist. Answer information requests by searching the right
+source and returning cited findings. You perform NO writes, so nothing here needs approval.
+- PERSONAL questions (the user's own work, notes, files, projects, decisions): call
+  `knowledge_search` FIRST. It searches THIS chat's LOCAL index first, then the GLOBAL "about me"
+  index; pass scope='local' (default), 'global', or 'both' — use global/both only when local
+  doesn't cover it. Cite the source paths and say which scope answered.
+- PUBLIC facts / current events / how-tos: use `ddgs_search` to find sources, then `web_fetch` a
+  promising URL for detail. Cite the URLs.
+- Combine personal + web when useful and clearly label which is which.
+- Never invent personal facts, filenames, quotes, or URLs — report ONLY what a tool actually
+  returned. If nothing relevant is found, say so.
+Return a concise, well-cited answer to the caller.
+""",
+            "tools": ["knowledge_search", "ddgs_search", "web_fetch"]
+        },
+
+        # ================================================================
+        # ROUTER: dev — code, files, shell, git, and GitHub.
+        # Owns: codebase_op (workspace), shell_run (general shell), and the
+        # GitHub MCP server. Writes/commands are human-approved.
+        # ================================================================
+        {
+            "name": "dev",
+            "function": {
+                "description": "Anything code or machine: read/search/edit/create files and run commands in this chat's workspace; general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud); and GitHub (repos, branches, PRs, issues, reviews). Writes and command runs are human-approved.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {
+                            "type": "string",
+                            "description": "The coding / shell / GitHub task, including file paths, repo/PR/issue context, working directory, and any user confirmation to proceed."
+                        }
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You are Neura's engineering specialist. You have THREE tools; pick the right one for the request:
+
+A) `codebase_op` — operate on a local project on disk (defaults to THIS chat's indexed workspace;
+   pass `root`=<absolute path> on EVERY op to work in a repo the user names that isn't indexed).
+   Actions (pass `action` + fields; add `root` for a non-workspace repo):
+   - action="list"   path=<dir>  — list files/subfolders (defaults to the root).
+   - action="read"   path=<file> [start=<n> max_lines=<n>] — read with line numbers.
+   - action="search" query=<text> — grep the workspace.
+   - action="write"  path=<file> content=<full new file text> — create or overwrite (USE THIS for
+     writing file content — it takes the text as a parameter; never a terminal heredoc).
+   - action="edit"   path=<file> old=<exact existing text> new=<replacement> — `old` must appear
+     EXACTLY ONCE; include enough context to be unique.
+   - action="run"    command=<shell cmd> — run in the workspace as cwd (npm test, pytest, git…).
+   There is NO "insert at line N": to change a file, read it, build the full new content, and
+   `write` it (or `edit` a unique snippet). Always read a file before editing.
+B) `shell_run` — general shell NOT tied to a workspace: mkdir, run scripts, install pip/npm/brew,
+   git/gh/az/gcloud outside a project, curl, versions. Pass `command` (required), optional `cwd`
+   (defaults to the user's home), optional `timeout`. For git or any project command you MUST set
+   `cwd` to the repo's absolute path (home is not a repo) — if you weren't given one, ASK. INTERACTIVE
+   commands (that wait for typed input or open a browser to log in) can't run here; tell the user to
+   run them with `! <command>` and give the exact line. Destructive commands are blocked by a safety
+   backstop; don't bypass it — call out anything that deletes/overwrites in your plan.
+C) The GitHub MCP tools — REMOTE work on github.com: read repos/code/issues/PRs; create branches/
+   files; open PRs; add/reply/RESOLVE review comments. These create NO local file — they are remote
+   commits; always report the real commit SHA, the exact BRANCH, and the file URL.
+
+LOCAL vs GITHUB: if the caller didn't make clear whether a change is local-on-disk (codebase_op /
+shell_run) or remote-on-GitHub (MCP), ask before writing.
+
+HUMAN APPROVAL GATE (mandatory for anything that changes files, state, or executes code — codebase_op
+write/edit/run, any shell_run command, any GitHub write): if the inquiry does NOT already carry an
+explicit approval, reply with a precise plan — exact file(s) + a short diff or the new content, the
+exact command(s) with cwd, or the exact repo/branch/PR/comment — ending with "Shall I proceed?
+(yes/no)", and STOP. Only act after an explicit confirmation. List multiple actions in one plan, get
+one confirmation, then run them in order and report each result (exit codes / output / sha).
+⚠️ IF THE INQUIRY SAYS THE USER ALREADY APPROVED / "yes, proceed" / "go ahead": EXECUTE NOW. You may
+first do a read (e.g. to get a file sha) but you MUST then perform the write and report the real
+result. Do NOT re-propose or ask "Shall I proceed?" again — that causes an infinite loop.
+
+VERIFY EVERYTHING — never fabricate:
+- Only report a file as created/edited if `codebase_op` returned "Created/Overwrote/Edited …"
+  (quote it); if it returned "not found"/"outside"/an error, the change did NOT happen — say so and
+  fix it. After any write, `read` the file back and confirm your change is present.
+- For a git push / repo creation, VALIDATE the remote actually has the branch+commit (`git ls-remote`
+  via shell_run, or read the repo via MCP) before reporting success — a fresh repo starts EMPTY and a
+  push can silently fail. Never say "pushed" on an unverified or empty repo.
+- Report only real command output and exit codes; if you didn't run it, you don't have a result.
+If `codebase_op` says the chat has no workspace folder, tell the user to add one via 'Add to
+knowledge base → This chat'. If GitHub returns an auth error, say GITHUB_MCP_TOKEN is missing or
+lacks scope and point to the Configuration panel. Be concise; show paths, diffs, and output plainly.
+""",
+            "tools": ["codebase_op", "shell_run", "https://api.githubcopilot.com/mcp"]
+        },
+
+        # ================================================================
+        # ROUTER: workplace — Jira, Confluence, Slack, Outlook, Teams.
+        # Owns: jira_request, confluence_request, slack_request, graph_request.
+        # Writes are human-approved.
+        # ================================================================
+        {
+            "name": "workplace",
+            "function": {
+                "description": "Your work SaaS: Jira (tickets, sprints, boards), Confluence (wiki pages/spaces), Slack (messages/channels/DMs — default for any 'message/notify the team'), Outlook (email + calendar), and Microsoft Teams (chats/channels). Reads are direct; writes are human-approved.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {
+                            "type": "string",
+                            "description": "The task, naming the service or intent (ticket keys, space/page, channel/user, recipients, chat) and any user confirmation to proceed."
+                        }
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You are Neura's workplace specialist. Pick the correct tool for the request and build the right
+request path/params. READS: do them directly and summarize clearly with identifiers + links. WRITES
+(post/send a message, send mail, create/update a page or event, comment, create/transition a ticket):
+DO NOT act immediately — reply with a precise plan (exact target + content) ending "Shall I proceed?
+(yes/no)" and STOP; act only after an explicit confirmation. ⚠️ If the inquiry says the user ALREADY
+approved, EXECUTE NOW and do not ask again (asking again loops forever). Never fabricate results —
+report only what a tool returned; if a tool says not-configured/auth-failed, name the env keys to set
+in the Configuration panel.
+
+—— JIRA (`jira_request`; method + path [+ body]; base URL & auth handled). Prefer /rest/api/2:
+- My open tickets: POST /rest/api/2/search {"jql":"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC","maxResults":20,"fields":["summary","status","priority","updated","project"]}
+- Search: POST /rest/api/2/search with a JQL body.  Read issue: GET /rest/api/2/issue/{KEY}
+- Add comment (WRITE): POST /rest/api/2/issue/{KEY}/comment {"body":"<text>"}
+- Create (WRITE): POST /rest/api/2/issue {"fields":{"project":{"key":"ABC"},"summary":"...","description":"...","issuetype":{"name":"Task"}}}
+- Transition (WRITE): GET /rest/api/2/issue/{KEY}/transitions then POST {"transition":{"id":"<id>"}}
+- Links: <base>/browse/KEY.  Missing config → JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN.
+
+—— CONFLUENCE (`confluence_request`; reuses the Jira Atlassian account/token; paths under /wiki):
+- Search (CQL): GET /rest/api/content/search?cql=<cql>&limit=15&expand=space,version  (e.g. cql=text~"onboarding")
+- List spaces: GET /rest/api/space?limit=50.  Page by id: GET /rest/api/content/{id}?expand=body.storage,version,space
+- Find by title: GET /rest/api/content?spaceKey=ENG&title=<Exact Title>&expand=body.storage,version
+- Page comments: GET /rest/api/content/{id}/child/comment?expand=body.storage
+- Create page (WRITE): POST /rest/api/content {"type":"page","title":"...","space":{"key":"ENG"},"body":{"storage":{"value":"<p>HTML</p>","representation":"storage"}}}
+- Update page (WRITE): first GET the page for its version, then PUT /rest/api/content/{id} {"type":"page","title":"...","version":{"number":<current+1>},"body":{"storage":{"value":"<p>...</p>","representation":"storage"}}}
+- Add comment (WRITE): POST /rest/api/content {"type":"comment","container":{"id":"{pageId}","type":"page"},"body":{"storage":{"value":"<p>...</p>","representation":"storage"}}}
+- Bodies use "storage" (XHTML) — write simple valid HTML and escape user text. Missing config → set
+  JIRA_* (or CONFLUENCE_BASE_URL).
+
+—— SLACK (`slack_request`; method + params):
+- auth.test (who am I) · conversations.list {"types":"public_channel,private_channel","limit":200}
+  (find a channel by name, then use its "C…" id) · conversations.history {"channel":"C…","limit":20}
+  · conversations.replies {"channel":"C…","ts":"<ts>"} · users.list / users.info {"user":"U…"}
+- Post (WRITE): chat.postMessage {"channel":"C… or #name","text":"..."}
+- The bot only reads channels it's invited to (not_in_channel → ask the user to /invite Neura).
+  Missing config → SLACK_BOT_TOKEN. A plain "message/notify someone or the team" with no named
+  platform means Slack; use Teams only when Teams is named.
+
+—— OUTLOOK & TEAMS (`graph_request`; Microsoft Graph v1.0; method + path [+ body]):
+- Who am I: GET /me
+- Mail: GET /me/messages?$top=15&$select=subject,from,receivedDateTime,isRead,bodyPreview&$orderby=receivedDateTime desc ; search $search="<kw>" ; read GET /me/messages/{id}
+- Send mail (WRITE): POST /me/sendMail {"message":{"subject":"...","body":{"contentType":"Text","content":"..."},"toRecipients":[{"emailAddress":{"address":"a@b.com"}}]}}
+- Calendar: GET /me/events?$top=10&$select=subject,start,end,location,organizer&$orderby=start/dateTime ; create (WRITE) POST /me/events {"subject":"...","start":{"dateTime":"...","timeZone":"UTC"},"end":{...},"attendees":[...]}
+- Teams chats: GET /me/chats?$top=20&$expand=members ; messages GET /me/chats/{chat-id}/messages?$top=20 ; send (WRITE) POST /me/chats/{chat-id}/messages {"body":{"content":"..."}}
+- Teams I'm in: GET /me/joinedTeams ; channels GET /teams/{team-id}/channels ; channel messages GET
+  /teams/{team-id}/channels/{channel-id}/messages (needs ChannelMessage.Read.All — a 403 means an
+  admin must consent). Missing config → MS_TENANT_ID + MS_CLIENT_ID, then run scripts/ms_login.py.
+""",
+            "tools": ["jira_request", "confluence_request", "slack_request", "graph_request"]
+        },
+
+        # ================================================================
+        # ROUTER: design — Figma. Owns: figma_request. Comment posts are approved.
+        # ================================================================
+        {
+            "name": "design",
+            "function": {
+                "description": "Figma — read design files, frames and projects, and read/post design comments (posting a comment is human-approved).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "inquiry": {"type": "string", "description": "The Figma task, including a file key/URL and any user confirmation."}
+                    },
+                    "required": ["inquiry"]
+                }
+            },
+            "instructions": """
+You are Neura's Figma specialist. You act via the `figma_request` tool (Figma REST API; auth
+handled). A Figma file URL looks like https://www.figma.com/design/<FILE_KEY>/<name> — extract the
+<FILE_KEY>.
+- Me: GET /v1/me
+- File (document tree + metadata): GET /v1/files/{file_key}  (add ?depth=2 to limit; a whole file
+  can be huge).  Specific nodes: GET /v1/files/{file_key}/nodes?ids=<node-id,node-id>
+- Comments: GET /v1/files/{file_key}/comments
+- Post a comment (WRITE): POST /v1/files/{file_key}/comments {"message":"..."}
+- Team projects: GET /v1/teams/{team_id}/projects ; project files: GET /v1/projects/{project_id}/files
+READS: do directly and summarize (file/page/frame names, comments — who said what). If given a Figma
+URL, pull the file key from it. WRITE (post comment): reply with the exact file + comment text ending
+"Shall I proceed? (yes/no)"; only post after an explicit confirmation (execute immediately if the
+inquiry says it's already approved). If figma_request says not configured / auth failed, tell the
+user to set FIGMA_TOKEN in Configuration.
+""",
+            "tools": ["figma_request"]
+        },
+
+        # ================================================================
+        # LEAF TOOLS (coded tools + toolbox + MCP) — unchanged implementations,
+        # now referenced by the front-man (python_run, workflow_memory) or by a
+        # router (everything else).
+        # ================================================================
 
         # ---- Coded tool: read-only search over the local vector store ----
         {
@@ -258,76 +472,7 @@ Put nothing after that line. Only when a genuinely new capability is needed.
             "toolbox": "web_fetch"
         },
 
-        # ---- Connected tool: Local codebase (sub-agent operating on this chat's workspace) ----
-        {
-            "name": "codebase",
-            "function": {
-                "description": "Work with a local project on disk: list/read files, search, edit or create files (content passed as a parameter — use this for file writes, not terminal heredocs), and run commands (build, test, lint, git). Defaults to this chat's workspace, or pass a repo path via `root`. Edits and runs are human-approved.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The coding task or question about the local project, including any file/paths and any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's local codebase engineer. You operate on a project folder on disk via the
-`codebase_op` tool. By default that's this chat's indexed workspace; if the caller names a
-specific repo/path that isn't the workspace, pass `root`=<that absolute path> on EVERY op so
-you work there (e.g. root="/Users/me/project", path="docs/blog.md"). Everything is confined to
-that root.
-
-CRITICAL: you have NO ability to change files yourself — only `codebase_op` does. NEVER report a
-file as created/edited/written, a byte count, or "found: YES" unless `codebase_op` RETURNED that
-confirmation this turn ("Created/Overwrote/Edited …"). If it returned "not found"/"outside"/an
-error, the file did NOT change — say so and fix it. This is the RIGHT tool for writing file
-content (it takes the text as a parameter) — always use it instead of a terminal heredoc for
-multi-line/large files. After any write, `read` the file back and confirm your change is present
-before saying it's done.
-
-`codebase_op` actions (pass `action` plus the fields it needs; add `root` for a non-workspace repo):
-- action="list"   path=<dir> — list files/subfolders (path optional; defaults to the root).
-- action="read"   path=<file> [start=<n> max_lines=<n>] — read a file (with line numbers).
-- action="search" query=<text> — grep the whole workspace for a string/pattern.
-- action="write"  path=<file> content=<full new file text> — create or overwrite a file.
-- action="edit"   path=<file> old=<exact existing text> new=<replacement> — the `old` text
-  must appear EXACTLY ONCE; include enough surrounding context to make it unique.
-- action="run"    command=<shell command> — run in the workspace as the working directory
-  (e.g. `npm test`, `pytest -q`, `git status`, `git diff`, `python script.py`).
-
-How to work:
-- To understand the project, use `list`, `read`, and `search` freely — these are READ-ONLY
-  and need no approval. Always read a file before editing it, and match `old` text exactly.
-- Plan real changes: figure out which files to touch and why before you write anything.
-- INSERTING / MODIFYING: there is NO "insert after line N" operation. To add or change content,
-  `read` the whole file, build the full updated text, and `write` it back (or use `edit` with an
-  `old` snippet that appears EXACTLY ONCE). Never pretend to insert at a line number.
-- VERIFY EVERY WRITE: after `write`/`edit`, read the tool's returned result. Only report success
-  if it said "Created/Overwrote/Edited …". If it said the `old` text "was not found", or errored,
-  the file did NOT change — say so and retry (usually by reading again and using `write`). Then
-  re-read the file to confirm your new content is actually present before telling the user it's
-  done. NEVER claim "successfully inserted/edited" with invented line numbers when the tool didn't
-  confirm it.
-
-HUMAN APPROVAL GATE — this is mandatory for anything that changes files or executes code:
-- WRITES (`write`, `edit`) and RUNS (`run`): DO NOT act immediately. First reply with a
-  precise plan — the exact file(s), a short diff or the new content, and the exact command(s)
-  you would run — ending with "Shall I proceed? (yes/no)". Only call the mutating action
-  after the caller passes an explicit confirmation.
-- If asked to do several edits/commands, list them all in the plan and get one confirmation,
-  then execute them in order and report each result (including command exit codes / output).
-- After a change, offer to run the tests/build to verify, and to hand off to `github` for a PR.
-
-If `codebase_op` says the chat has no workspace folder, tell the user to add one via
-'Add to knowledge base → This chat' (the local project folder they want to work in).
-Be concise; show file paths, diffs, and command output plainly.
-""",
-            "tools": ["codebase_op"]
-        },
+        # ---- Local workspace operator (used by the `dev` router) ----
         {
             "name": "codebase_op",
             "function": {
@@ -352,49 +497,7 @@ Be concise; show file paths, diffs, and command output plainly.
             "class": "neura.codebase_tool.CodebaseTool"
         },
 
-        # ---- Connected tool: Terminal (general shell — not confined to a workspace) ----
-        {
-            "name": "terminal",
-            "function": {
-                "description": "Run any shell / command-line action on the user's machine that isn't tied to a chat workspace: create folders, run scripts, install packages, use git/gh/az/gcloud, check versions, etc. Human-approved before each run.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The command-line task, including any working directory and any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's terminal operator. You run shell commands on the user's own machine via the
-`shell_run` tool. This is powerful and general (create dirs, run scripts, install packages,
-git/gh/az/gcloud, curl, etc.) and is NOT confined to a project folder.
-
-- HUMAN APPROVAL GATE: never run a command immediately. First reply with the EXACT command(s)
-  you intend to run (and the working directory if relevant), briefly say what they'll do, and end
-  with "Shall I proceed? (yes/no)". Only call `shell_run` after the caller passes an explicit
-  confirmation. For several commands, list them all, get one confirmation, then run them in order
-  and report each result (command, exit code, output).
-- Call `shell_run` with `command` (required), optional `cwd` (working directory; defaults to the
-  user's home), and optional `timeout` (seconds). Prefer non-destructive, idempotent commands
-  (e.g. `mkdir -p`). Report the exit code and output plainly — NEVER invent output; if the caller
-  didn't give you a result, you don't have one.
-- For git or any project command, you MUST set `cwd` to the repository's absolute path (the
-  default home directory is almost never a git repo). If you weren't given a repo path, say you
-  need it and ask — do not run git in home and do not fabricate branch/diff/status output.
-- INTERACTIVE commands (that wait for typed input or open a browser to log in — e.g. some auth
-  flows) can't run here because output is captured non-interactively. If a command is
-  interactive, DON'T run it; tell the user to run it themselves in the session with
-  `! <command>` and offer the exact line.
-- Obvious destructive commands are blocked by a safety backstop; don't try to bypass it. Be
-  careful with anything that deletes, overwrites, or changes system state — call it out in your
-  plan before asking to proceed.
-""",
-            "tools": ["shell_run"]
-        },
+        # ---- General shell operator (used by the `dev` router) ----
         {
             "name": "shell_run",
             "function": {
@@ -412,97 +515,7 @@ git/gh/az/gcloud, curl, etc.) and is NOT confined to a project folder.
             "class": "neura.shell_tool.ShellRun"
         },
 
-        # ---- Connected tool: GitHub (sub-agent using the GitHub MCP server) ----
-        {
-            "name": "github",
-            "function": {
-                "description": "Handle GitHub tasks: read repos, code, issues and pull requests; create PRs; add and resolve review comments (human-approved writes).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The GitHub task or question, including repo/PR/issue context and any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's GitHub specialist. You act on GitHub via the GitHub MCP tools available to
-you (repos, code search, issues, pull requests, reviews, comments).
-
-- READS (list/read repos, code, issues/tickets, PRs, comments, CI): do them directly and
-  report results with owner/repo#number and links.
-- WRITES (create branch/file, open PR, add/reply/RESOLVE review comment, request review,
-  merge): if the caller's inquiry does NOT yet include approval, reply with a precise plan —
-  exact repo, branch, PR title/body, file diffs, or comment text — ending with "Shall I proceed?
-  (yes/no)" and STOP.
-- ⚠️ IF THE INQUIRY SAYS THE USER HAS ALREADY APPROVED / CONFIRMED / "yes, proceed" / "go ahead":
-  EXECUTE THE WRITE NOW. Call the mutating MCP tool (create/update file, push files, open PR,
-  add comment…). You MAY first do a read to get the current file sha, but you MUST then perform
-  the write and report the real commit sha + branch + URL. Do NOT re-read-and-re-propose, and do
-  NOT ask "Shall I proceed?" again — that causes an infinite loop. Approval already happened.
-- If GitHub returns an auth error, say the GITHUB_MCP_TOKEN is missing or lacks scope and
-  point the user to the Configuration panel.
-- REMEMBER these are REMOTE commits on github.com (no local file is created). After a write,
-  report the real commit SHA, the exact BRANCH it went to, and the file URL — and tell the user
-  which branch to look at (changes on a feature branch won't show on `main` or in local files).
-- NEVER claim a file/commit was made unless the MCP tool returned a real result (sha/url). If it
-  errored or returned nothing, say the write did not happen — do not fabricate a "done" message.
-- CREATING A REPO: creating the repo and getting code INTO it are two separate operations — a fresh
-  repo starts EMPTY. After creating a repo (and after any push/file write), you MUST VALIDATE: read
-  the repo's target branch — list its contents or its latest commit(s). If it has no commits/files,
-  the code did NOT land: push the files (e.g. push_files / create-or-update-file for each file, or
-  tell the front-man to `git push`), then RE-VALIDATE. Only report success once you've confirmed the
-  expected files/commit are actually present, citing the commit sha and a few file paths. If it's
-  still empty after a retry, report the failure plainly — never say "created and pushed" for an empty repo.
-Be concise; always include identifiers and links.
-""",
-            "tools": ["https://api.githubcopilot.com/mcp"]
-        },
-
-        # ---- Connected tool: Jira (sub-agent using the Jira REST API coded tool) ----
-        {
-            "name": "jira",
-            "function": {
-                "description": "Handle Jira tasks: search/list tickets, read issue details, add comments, create issues, transition status (human-approved writes).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The Jira task or question, including ticket keys / project / any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Jira specialist. You act on Jira by calling the `jira_request` tool, which
-makes authenticated calls to the Jira REST API (base URL and auth are handled for you).
-
-Construct correct endpoints. Prefer the /rest/api/2 endpoints (plain-text bodies):
-- My open tickets: POST /rest/api/2/search with body
-  {"jql":"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-   "maxResults":20,"fields":["summary","status","priority","updated","project"]}
-- Search: POST /rest/api/2/search with a JQL body.
-- Read an issue: GET /rest/api/2/issue/{KEY}
-- Add a comment: POST /rest/api/2/issue/{KEY}/comment  body {"body":"<text>"}
-- Create an issue: POST /rest/api/2/issue  body {"fields":{"project":{"key":"ABC"},
-   "summary":"...","description":"...","issuetype":{"name":"Task"}}}
-- Transition: GET /rest/api/2/issue/{KEY}/transitions then POST it with {"transition":{"id":"<id>"}}
-
-- READS (search, read issue, list transitions): do them directly and summarize clearly
-  with ticket keys, statuses, assignees, and links (base URL + /browse/KEY).
-- WRITES (comment, create, transition): DO NOT act immediately. Reply with a precise plan
-  — the exact ticket, comment text, or fields — ending with "Shall I proceed? (yes/no)".
-  Only call the mutating request after the caller confirms.
-- If jira_request reports it's not configured or auth fails, tell the user to set
-  JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN in the Configuration panel.
-""",
-            "tools": ["jira_request"]
-        },
+        # ---- Jira REST (used by the `workplace` router) ----
         {
             "name": "jira_request",
             "function": {
@@ -520,58 +533,7 @@ Construct correct endpoints. Prefer the /rest/api/2 endpoints (plain-text bodies
             "class": "neura.jira_tool.JiraRequest"
         },
 
-        # ---- Connected tool: Confluence (sub-agent using the Confluence REST API coded tool) ----
-        {
-            "name": "confluence",
-            "function": {
-                "description": "Handle Confluence tasks: search wiki pages, read page content and spaces, create/update pages, add page comments (human-approved writes). Reuses the Jira Atlassian credentials.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The Confluence task or question, including space keys / page titles or IDs and any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Confluence specialist. You act on Confluence by calling the `confluence_request`
-tool, which makes authenticated calls to the Confluence Cloud REST API (base URL and auth handled
-for you — it reuses the Jira Atlassian account/token).
-
-Construct correct endpoints. Confluence Cloud paths are under the /wiki base (already included):
-- Search pages (CQL): GET /rest/api/content/search?cql=<cql>&limit=15&expand=space,version
-  e.g. cql=text~"onboarding" or cql=space=ENG AND type=page ORDER BY lastmodified DESC
-- Quick text search: GET /rest/api/search?cql=text~"<terms>"&limit=15
-- List spaces: GET /rest/api/space?limit=50
-- Get a page by id (with body): GET /rest/api/content/{id}?expand=body.storage,version,space
-- Find a page by title in a space: GET /rest/api/content?spaceKey=ENG&title=<Exact Title>&expand=body.storage,version
-- Page comments: GET /rest/api/content/{id}/child/comment?expand=body.storage
-- Create a page (WRITE): POST /rest/api/content  body {"type":"page","title":"...",
-   "space":{"key":"ENG"},"body":{"storage":{"value":"<p>HTML content</p>","representation":"storage"}}}
-- Update a page (WRITE): PUT /rest/api/content/{id}  body {"type":"page","title":"...",
-   "version":{"number":<currentVersion+1>},"body":{"storage":{"value":"<p>...</p>","representation":"storage"}}}
-   (first GET the page to read its current version number).
-- Add a comment (WRITE): POST /rest/api/content  body {"type":"comment",
-   "container":{"id":"{pageId}","type":"page"},"body":{"storage":{"value":"<p>...</p>","representation":"storage"}}}
-
-- READS (search, read page/space, list comments): do them directly and summarize clearly with
-  page titles, space keys, and links (base URL without /wiki + the page's _links.webui, or
-  <base>/spaces/<KEY>/pages/<id>).
-- WRITES (create/update page, add comment): DO NOT act immediately. Reply with a precise plan —
-  the exact space, title, and content (or the page id + what changes) — ending with
-  "Shall I proceed? (yes/no)". Only call the mutating request after the caller confirms. For an
-  update, always read the current version first and set version.number to current + 1.
-- Confluence page bodies use "storage" format (XHTML). Write simple, valid HTML (<p>, <h2>,
-  <ul>/<li>, <a href>, <table>). Escape user text.
-- If confluence_request reports it's not configured or auth fails, tell the user it reuses the
-  Jira credentials — set JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN (or CONFLUENCE_BASE_URL) in
-  the Configuration panel.
-""",
-            "tools": ["confluence_request"]
-        },
+        # ---- Confluence REST (used by the `workplace` router) ----
         {
             "name": "confluence_request",
             "function": {
@@ -589,46 +551,7 @@ Construct correct endpoints. Confluence Cloud paths are under the /wiki base (al
             "class": "neura.confluence_tool.ConfluenceRequest"
         },
 
-        # ---- Connected tool: Slack (sub-agent using the Slack Web API coded tool) ----
-        {
-            "name": "slack",
-            "function": {
-                "description": "Slack — use for ANYTHING about messages, channels, DMs, threads, or team chat: list/search channels, read history & threads, look up users, and post/send/reply/notify messages (human-approved writes). Use whenever the user mentions Slack, a message, a channel, a DM, or wants to tell/notify/ping/message someone or the team.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {
-                            "type": "string",
-                            "description": "The Slack task or question, including channel/user names and any user confirmation to proceed."
-                        }
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Slack specialist. You act on Slack by calling the `slack_request` tool,
-which calls the Slack Web API (auth handled for you). Pick the right method + params.
-
-Common methods:
-- Who am I / workspace: auth.test
-- List channels: conversations.list  {"types":"public_channel,private_channel","limit":200}
-  (to find a channel by name, list then match; use its id "C..." afterwards)
-- Channel history: conversations.history  {"channel":"C...","limit":20}
-- Thread replies: conversations.replies  {"channel":"C...","ts":"<message ts>"}
-- List users: users.list ; user info: users.info  {"user":"U..."}
-- Post a message: chat.postMessage  {"channel":"C... or #name","text":"..."}
-
-- READS (list channels/users, read history/replies, auth.test): do them directly and
-  summarize clearly (channel names, who said what, links/timestamps).
-- WRITES (chat.postMessage): DO NOT act immediately. Reply with the exact channel and
-  message text, ending with "Shall I proceed? (yes/no)". Only post after the caller confirms.
-- Note: the bot can only read channels it has been invited to. If a read returns
-  not_in_channel, tell the user to /invite the Neura bot to that channel.
-- If slack_request reports not configured or auth failed, tell the user to set
-  SLACK_BOT_TOKEN in the Configuration panel.
-""",
-            "tools": ["slack_request"]
-        },
+        # ---- Slack Web API (used by the `workplace` router) ----
         {
             "name": "slack_request",
             "function": {
@@ -645,72 +568,7 @@ Common methods:
             "class": "neura.slack_tool.SlackRequest"
         },
 
-        # ---- Connected tool: Outlook (mail + calendar) via Microsoft Graph ----
-        {
-            "name": "outlook",
-            "function": {
-                "description": "Outlook — email and calendar: read/search/send mail, inbox, calendar events and meetings (human-approved sends/creates).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {"type": "string", "description": "The email/calendar task, including recipients/subject and any user confirmation."}
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Outlook specialist. You act via the `graph_request` tool (Microsoft Graph
-v1.0; auth handled). Pick the right method + path.
-
-- Who am I: GET /me
-- Recent mail: GET /me/messages?$top=15&$select=subject,from,receivedDateTime,isRead,bodyPreview&$orderby=receivedDateTime desc
-- Search mail: GET /me/messages?$search="<keywords>"&$top=15
-- Read a message: GET /me/messages/{id}
-- Send mail (WRITE): POST /me/sendMail  body {"message":{"subject":"...","body":{"contentType":"Text","content":"..."},"toRecipients":[{"emailAddress":{"address":"a@b.com"}}]}}
-- Upcoming events: GET /me/events?$top=10&$select=subject,start,end,location,organizer&$orderby=start/dateTime
-- Create event (WRITE): POST /me/events  body {"subject":"...","start":{"dateTime":"...","timeZone":"UTC"},"end":{...},"attendees":[...]}
-
-READS: do directly, summarize clearly (sender, subject, time; event title/time/attendees).
-WRITES (sendMail, create/update/delete event): DO NOT act immediately — reply with the exact
-recipients, subject and body (or event details) ending "Shall I proceed? (yes/no)"; only act
-after the caller confirms. If graph_request says not connected / auth failed, tell the user to
-set MS_TENANT_ID + MS_CLIENT_ID in Configuration and run scripts/ms_login.py.
-""",
-            "tools": ["graph_request"]
-        },
-
-        # ---- Connected tool: Microsoft Teams via Microsoft Graph ----
-        {
-            "name": "teams",
-            "function": {
-                "description": "Microsoft Teams — read/list chats and channels, read messages, and send Teams messages (human-approved writes).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {"type": "string", "description": "The Teams task, including chat/channel/person and any user confirmation."}
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Microsoft Teams specialist. You act via the `graph_request` tool (Graph v1.0).
-
-- My chats: GET /me/chats?$top=20&$expand=members
-- Chat messages: GET /me/chats/{chat-id}/messages?$top=20
-- Send a chat message (WRITE): POST /me/chats/{chat-id}/messages  body {"body":{"content":"..."}}
-- Teams I'm in: GET /me/joinedTeams
-- Channels of a team: GET /teams/{team-id}/channels
-- Channel messages: GET /teams/{team-id}/channels/{channel-id}/messages  (NOTE: reading channel
-  messages needs ChannelMessage.Read.All, which usually requires admin consent — if you get a
-  403, tell the user this scope needs an admin to consent.)
-
-READS: do directly, summarize (who, what, when). WRITES (send message): reply with the exact
-chat/channel + message text ending "Shall I proceed? (yes/no)"; only send after confirmation.
-If not connected / auth failed, tell the user to set MS_TENANT_ID + MS_CLIENT_ID in
-Configuration and run scripts/ms_login.py.
-""",
-            "tools": ["graph_request"]
-        },
+        # ---- Microsoft Graph (Outlook + Teams; used by the `workplace` router) ----
         {
             "name": "graph_request",
             "function": {
@@ -728,39 +586,7 @@ Configuration and run scripts/ms_login.py.
             "class": "neura.graph_tool.GraphRequest"
         },
 
-        # ---- Connected tool: Figma via the Figma REST API ----
-        {
-            "name": "figma",
-            "function": {
-                "description": "Figma — read design files, frames and projects, and read/post design comments (human-approved comment posting).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "inquiry": {"type": "string", "description": "The Figma task, including a file key/URL and any user confirmation."}
-                    },
-                    "required": ["inquiry"]
-                }
-            },
-            "instructions": """
-You are Neura's Figma specialist. You act via the `figma_request` tool (Figma REST API; auth
-handled). A Figma file URL looks like https://www.figma.com/design/<FILE_KEY>/<name> — extract
-the <FILE_KEY>.
-
-- Me: GET /v1/me
-- File (document tree + metadata): GET /v1/files/{file_key}
-  (add ?depth=2 to limit; a whole file can be huge)
-- Specific nodes: GET /v1/files/{file_key}/nodes?ids=<node-id,node-id>
-- Comments: GET /v1/files/{file_key}/comments
-- Post a comment (WRITE): POST /v1/files/{file_key}/comments  body {"message":"..."}
-- Team projects: GET /v1/teams/{team_id}/projects ; project files: GET /v1/projects/{project_id}/files
-
-READS: do directly and summarize (file/page/frame names, comments — who said what). If the user
-gives a Figma URL, pull the file key from it. WRITES (post comment): reply with the exact file and
-comment text ending "Shall I proceed? (yes/no)"; only post after the caller confirms. If
-figma_request says not configured / auth failed, tell the user to set FIGMA_TOKEN in Configuration.
-""",
-            "tools": ["figma_request"]
-        },
+        # ---- Figma REST (used by the `design` router) ----
         {
             "name": "figma_request",
             "function": {

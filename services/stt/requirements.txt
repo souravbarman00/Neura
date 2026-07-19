@@ -1,0 +1,8 @@
+# Neura Whisper STT service — kept installable alongside the app in the shared
+# project .venv. faster-whisper (CTranslate2) runs the Whisper model locally/offline
+# after a one-time model download. PyAV (pulled in by faster-whisper) decodes the
+# browser's webm/opus, so NO system ffmpeg is required.
+faster-whisper>=1.0.0   # local speech-to-text (downloads the Whisper model on first run)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+numpy>=1.24

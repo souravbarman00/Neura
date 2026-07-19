@@ -23,7 +23,7 @@ from neura import arxiv_lib  # noqa: E402
 
 _CACHE = _ROOT / "data" / "research_radar.json"
 
-# Seeded from Sourav's field (AI Lab / LEAF / neuro-san) — editable from the UI.
+# Neutral default research areas (general agentic-AI topics) — editable from the UI.
 DEFAULT_AREAS: List[Dict[str, str]] = [
     {"label": "Multi-agent LLM systems", "query": 'all:"multi-agent" AND all:"language model"'},
     {"label": "Agent orchestration & frameworks", "query": 'all:"agentic" OR all:"agent orchestration"'},
@@ -83,6 +83,23 @@ async def fetch(areas: List[Dict[str, str]], per_area: int = 6) -> List[Dict[str
             seen.add(p["id"])
             deduped.append(p)
     return deduped
+
+
+async def fetch_one(ref: str) -> Dict[str, Any] | None:
+    """Fetch a single paper by arXiv id or URL (for the 'paste a paper link' flow)."""
+    import re
+
+    m = re.search(r"(\d{4}\.\d{4,5})(v\d+)?", ref or "")
+    aid = m.group(1) if m else (ref or "").strip()
+    if not aid:
+        return None
+    async with httpx.AsyncClient() as client:
+        papers = await arxiv_lib.asearch(client, f"id:{aid}", 1)
+    if not papers:
+        return None
+    p = papers[0]
+    p["area"] = "On demand"
+    return p
 
 
 async def build(

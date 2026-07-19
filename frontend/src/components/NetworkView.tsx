@@ -3,7 +3,7 @@ import type { Edge } from "@xyflow/react";
 import { getGraph } from "../api";
 import { NetworkGraph } from "../studio/graph/NetworkGraph";
 import { detailToFlow, type AgentFlowNode, type DetailNode, type LayoutMode } from "../studio/graph/layout";
-import { ChevronDown } from "../icons";
+import { ChevronDown, Maximize, Minimize } from "../icons";
 import CodeView from "./CodeView";
 
 interface Props {
@@ -19,6 +19,10 @@ interface Props {
   busy: boolean;
   onToggle(): void;
   paperUrl?: string; // when set, a "Paper" tab (embedded PDF) replaces the Code tab
+  // When defined, the header control becomes a Maximize/Minimize toggle (driven by
+  // this flag) instead of the graph collapse chevron — used by the Radar to make this
+  // panel fill the whole left side.
+  expanded?: boolean;
 }
 
 interface Win {
@@ -52,6 +56,7 @@ export default function NetworkView({
   busy,
   onToggle,
   paperUrl,
+  expanded,
 }: Props) {
   const [tab, setTab] = useState<"agents" | "logs" | "code" | "paper">(paperUrl ? "paper" : "agents");
   useEffect(() => {
@@ -63,7 +68,7 @@ export default function NetworkView({
   }, [focus]);
   const [detail, setDetail] = useState<DetailNode[]>([]);
   const [layout, setLayout] = useState<LayoutMode>(() =>
-    (typeof localStorage !== "undefined" && localStorage.getItem("neura_graph_layout") === "free") ? "free" : "tree"
+    (typeof localStorage !== "undefined" && localStorage.getItem("neura_graph_layout") === "tree") ? "tree" : "free"
   );
   const [win, setWin] = useState<Win>(loadWin);
 
@@ -80,9 +85,37 @@ export default function NetworkView({
   >(null);
 
   useEffect(() => {
-    getGraph(network)
-      .then((g) => setDetail((g.detail || []) as DetailNode[]))
-      .catch(() => setDetail([]));
+    // Poll until the graph is available: at (standalone) app startup the UI backend
+    // can answer before the neuro-san server has finished loading its networks, so the
+    // first fetch may come back empty. Retry with backoff until we get nodes, then stop.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let tries = 0;
+    const poll = () => {
+      getGraph(network)
+        .then((g) => {
+          if (cancelled) return;
+          const d = (g.detail || []) as DetailNode[];
+          setDetail(d);
+          if (d.length === 0 && tries < 20) {
+            tries += 1;
+            timer = setTimeout(poll, Math.min(500 + tries * 400, 3000));
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setDetail([]);
+          if (tries < 20) {
+            tries += 1;
+            timer = setTimeout(poll, Math.min(500 + tries * 400, 3000));
+          }
+        });
+    };
+    poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [network]);
 
   const { nodes, edges } = useMemo(() => {
@@ -178,13 +211,23 @@ export default function NetworkView({
             <button className={layout === "free" ? "on" : ""} onClick={() => chooseLayout("free")}>Free flow</button>
           </div>
         )}
-        <button
-          className={"iconbtn sm netcollapse" + (open ? "" : " up")}
-          onClick={onToggle}
-          title={open ? "Collapse graph" : "Expand graph"}
-        >
-          <ChevronDown />
-        </button>
+        {expanded === undefined ? (
+          <button
+            className={"iconbtn sm netcollapse" + (open ? "" : " up")}
+            onClick={onToggle}
+            title={open ? "Collapse graph" : "Expand graph"}
+          >
+            <ChevronDown />
+          </button>
+        ) : (
+          <button
+            className="iconbtn sm netcollapse"
+            onClick={onToggle}
+            title={expanded ? "Restore paper details" : "Maximize this panel"}
+          >
+            {expanded ? <Minimize /> : <Maximize />}
+          </button>
+        )}
       </div>
 
       {open && tab === "paper" && paperUrl ? (
