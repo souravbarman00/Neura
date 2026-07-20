@@ -83,6 +83,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE messages ADD COLUMN trace TEXT DEFAULT ''")
         if "commands" not in mcols:
             c.execute("ALTER TABLE messages ADD COLUMN commands TEXT DEFAULT ''")
+        if "file_changes" not in mcols:
+            c.execute("ALTER TABLE messages ADD COLUMN file_changes TEXT DEFAULT ''")
         if "workspace_path" not in cols:
             c.execute("ALTER TABLE conversations ADD COLUMN workspace_path TEXT DEFAULT ''")
         if "checklist" not in cols:
@@ -172,7 +174,7 @@ def get_conversation(cid: str) -> Optional[dict[str, Any]]:
         if not row:
             return None
         msgs = c.execute(
-            "SELECT id, role, text, sources, build, trace, commands, created FROM messages WHERE conv_id=? ORDER BY created",
+            "SELECT id, role, text, sources, build, trace, commands, file_changes, created FROM messages WHERE conv_id=? ORDER BY created",
             (cid,),
         ).fetchall()
     out = dict(row)
@@ -188,6 +190,7 @@ def get_conversation(cid: str) -> Optional[dict[str, Any]]:
             "build": (m["build"] if "build" in m.keys() else "") or "",
             "trace": json.loads(m["trace"]) if ("trace" in m.keys() and m["trace"]) else [],
             "commands": json.loads(m["commands"]) if ("commands" in m.keys() and m["commands"]) else [],
+            "file_changes": json.loads(m["file_changes"]) if ("file_changes" in m.keys() and m["file_changes"]) else [],
         }
         for m in msgs
     ]
@@ -197,14 +200,16 @@ def get_conversation(cid: str) -> Optional[dict[str, Any]]:
 def add_message(
     cid: str, role: str, text: str, sources: Optional[list] = None, build: str = "",
     trace: Optional[list] = None, commands: Optional[list] = None,
+    file_changes: Optional[list] = None,
 ) -> str:
     mid = uuid.uuid4().hex[:12]
     with _conn() as c:
         c.execute(
-            "INSERT INTO messages (id, conv_id, role, text, sources, build, trace, commands, created) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO messages (id, conv_id, role, text, sources, build, trace, commands, file_changes, created) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (mid, cid, role, text, json.dumps(sources or []), build or "",
-             json.dumps(trace or []), json.dumps(commands or []), time.time()),
+             json.dumps(trace or []), json.dumps(commands or []),
+             json.dumps(file_changes or []), time.time()),
         )
         c.execute("UPDATE conversations SET updated=? WHERE id=?", (time.time(), cid))
     return mid

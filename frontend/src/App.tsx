@@ -37,7 +37,7 @@ import {
   type WatchStatus,
 } from "./api";
 import { useMediaQuery, useTheme } from "./hooks";
-import type { AgentMsg, CommandRun, Message, Source } from "./types";
+import type { AgentMsg, CommandRun, FileChange, Message, Source } from "./types";
 
 let idSeq = 0;
 const nextId = () => `local-${++idSeq}`;
@@ -242,6 +242,7 @@ export default function App() {
         c.messages.map((m) => ({
           id: m.id, role: m.role, text: m.text, sources: m.sources,
           build: m.build || undefined, trace: m.trace || undefined, commands: m.commands || undefined,
+          fileChanges: m.file_changes || undefined,
         }))
       );
       const lastAi = [...c.messages].reverse().find((m) => m.role === "ai");
@@ -361,6 +362,7 @@ export default function App() {
     let liveSources: Source[] = [];
     const trace: AgentMsg[] = [];
     const cmds: CommandRun[] = [];
+    const fcs: FileChange[] = [];
 
     try {
       await streamChat(
@@ -423,6 +425,12 @@ export default function App() {
               setLiveCommands([...cmds]);
             }
           },
+          onFileChange: (fc) => {
+            fcs.push(fc);
+            if (created) {
+              setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, fileChanges: [...fcs] } : msg)));
+            }
+          },
           onAnswer: (t) => {
             setActivity(null);
             setImagePending(false);
@@ -432,10 +440,10 @@ export default function App() {
             setMessages((m) => {
               if (!created) {
                 created = true;
-                return [...m, { id: aiId, role: "ai", text: t, sources: liveSources, trace: [...trace], commands: [...cmds] }];
+                return [...m, { id: aiId, role: "ai", text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] }];
               }
               return m.map((msg) =>
-                msg.id === aiId ? { ...msg, text: t, sources: liveSources, trace: [...trace], commands: [...cmds] } : msg
+                msg.id === aiId ? { ...msg, text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] } : msg
               );
             });
           },

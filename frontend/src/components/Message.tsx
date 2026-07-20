@@ -10,6 +10,7 @@ import { parseChoices } from "../choices";
 import { API_BASE } from "../api";
 import TraceList from "./TraceList";
 import CommandCard from "./CommandCard";
+import DiffCard from "./DiffCard";
 
 // Rich, modern renderers: links open in a new tab (with an external-link icon),
 // tables scroll horizontally on overflow.
@@ -89,6 +90,7 @@ export default function Message({
   const isAI = msg.role === "ai";
   const trace = msg.trace || [];
   const commands = msg.commands || [];
+  const fileChanges = msg.fileChanges || [];
   // Type-out the in-flight answer (this message only); everything else is instant.
   const { shown, done } = useTypewriter(msg.text, !!animate && isAI);
   const showApproval = isAI && !!last && !busy && done && !!onApprove && isApprovalText(msg.text);
@@ -143,6 +145,13 @@ export default function Message({
           <div className="msg-commands">
             {commands.map((c, i) => (
               <CommandCard key={i} cmd={c} />
+            ))}
+          </div>
+        )}
+        {isAI && fileChanges.length > 0 && (
+          <div className="msg-changes">
+            {fileChanges.map((f, i) => (
+              <DiffCard key={i} fc={f} />
             ))}
           </div>
         )}

@@ -19,6 +19,12 @@ export interface CommandRun {
   output: string;
 }
 
+export interface FileChange {
+  path: string;
+  diff: string; // unified diff text
+  kind?: string; // "edit" | "create" | "overwrite"
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -27,6 +33,7 @@ export interface Message {
   build?: string; // capability description if Neura suggested building an agent
   trace?: AgentMsg[]; // agent-to-agent talk behind this answer (the "thinking")
   commands?: CommandRun[]; // shell commands the codebase agent ran (terminal cards)
+  fileChanges?: FileChange[]; // file edits/creates the codebase agent made (diff cards)
 }
 
 export interface Health {

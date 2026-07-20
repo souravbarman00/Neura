@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { getConversation, streamChat, type ChecklistItem } from "./api";
-import type { AgentMsg, CommandRun, Message } from "./types";
+import type { AgentMsg, CommandRun, FileChange, Message } from "./types";
 
 // Radar user turns are transmitted with a hidden paper-context preamble; strip it so
 // the reloaded user bubbles show just the question.
@@ -88,6 +88,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
         sources: m.sources || undefined,
         trace: m.trace || undefined,
         commands: m.commands || undefined,
+        fileChanges: m.file_changes || undefined,
       }))
     );
   }
@@ -114,6 +115,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     let created = false;
     const trace: AgentMsg[] = [];
     const cmds: CommandRun[] = [];
+    const fcs: FileChange[] = [];
 
     try {
       await streamChat(
@@ -164,6 +166,12 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
               setLiveCommands([...cmds]);
             }
           },
+          onFileChange: (fc) => {
+            fcs.push(fc);
+            if (created) {
+              setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, fileChanges: [...fcs] } : x)));
+            }
+          },
           onAnswer: (t) => {
             setActivity(null);
             setImagePending(false); // the answer carries the image now
@@ -172,9 +180,9 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
             setMessages((m) => {
               if (!created) {
                 created = true;
-                return [...m, { id: aiId, role: "ai", text: t, trace: [...trace], commands: [...cmds] }];
+                return [...m, { id: aiId, role: "ai", text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] }];
               }
-              return m.map((x) => (x.id === aiId ? { ...x, text: t, trace: [...trace], commands: [...cmds] } : x));
+              return m.map((x) => (x.id === aiId ? { ...x, text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] } : x));
             });
           },
           onChecklist: (items) => setChecklist(items || []),

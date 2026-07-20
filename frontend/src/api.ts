@@ -34,6 +34,7 @@ export interface ChatCallbacks {
   onSuggestBuild?(description: string): void;
   onAgentMessage?(m: { agent: string; text: string; kind?: string; path?: string[] }): void;
   onCommand?(c: { command: string; exit: number; output: string }): void;
+  onFileChange?(fc: { path: string; diff: string; kind?: string }): void;
   onChecklist?(items: ChecklistItem[]): void;
   onProgress?(value: number): void;
   onImagePending?(): void;
@@ -137,6 +138,10 @@ export async function streamChat(
           cb.onCommand?.(ev);
           cb.onLog?.({ kind: "command", text: `$ ${ev.command} (exit ${ev.exit})` });
           break;
+        case "file_change":
+          cb.onFileChange?.(ev);
+          cb.onLog?.({ kind: "edit", text: `${ev.kind || "changed"} ${ev.path}` });
+          break;
         case "checklist": cb.onChecklist?.(ev.items || []); break;
         case "progress": cb.onProgress?.(ev.value); break;
         case "image_pending": cb.onImagePending?.(); break;
@@ -164,7 +169,7 @@ export async function getConversation(id: string): Promise<{
   workspace_path?: string;
   local_kb_chunks?: number;
   checklist?: ChecklistItem[];
-  messages: { id: string; role: "user" | "ai"; text: string; sources: Source[]; build?: string; trace?: AgentMsg[]; commands?: { command: string; exit: number; output: string }[] }[];
+  messages: { id: string; role: "user" | "ai"; text: string; sources: Source[]; build?: string; trace?: AgentMsg[]; commands?: { command: string; exit: number; output: string }[]; file_changes?: { path: string; diff: string; kind?: string }[] }[];
 }> {
   return (await fetch(`${API_BASE}/api/conversations/${id}`)).json();
 }

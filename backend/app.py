@@ -344,6 +344,21 @@ def _trim(t: str, n: int = 700) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
 
+_DIFF_RE = re.compile(r"<<NEURA_DIFF:(\w+):(.*?)>>\n(.*?)\n<<END_DIFF>>", re.DOTALL)
+
+
+def _extract_file_changes(text: str) -> tuple[list[dict], str]:
+    """Pull `<<NEURA_DIFF:kind:path>> … <<END_DIFF>>` blocks (from codebase_op write/edit)
+    out of a tool result into {kind, path, diff} dicts, returning them + the cleaned text
+    (so the raw diff doesn't clutter the agent trace)."""
+    changes: list[dict] = []
+    for m in _DIFF_RE.finditer(text):
+        changes.append({"kind": m.group(1), "path": m.group(2), "diff": m.group(3)})
+    if changes:
+        text = _DIFF_RE.sub("", text).strip()
+    return changes, text
+
+
 def _parse_command(text: str) -> dict | None:
     """Parse a codebase `run` tool result ('$ <cmd>\\n(exit code N)\\n--- stdout ---\\n…')
     into a structured command card. Returns None if the text isn't a command run."""
@@ -1739,6 +1754,7 @@ async def chat(request: Request) -> StreamingResponse:
             yield _sse({"type": "checklist", "items": checklist})
         trace_log: list = []  # agent-to-agent talk for this answer (the "thinking")
         cmd_log: list = []    # shell commands the codebase agent ran (terminal cards)
+        fc_log: list = []     # file changes (diff cards) the codebase agent made
         front = None          # front-man name (root of the origin path)
         seen_results: set = set()  # dedupe tool results that bubble UP the origin chain
         #   (the same result is re-emitted at each ancestor — sub-agent AND front-man —
@@ -1783,6 +1799,15 @@ async def chat(request: Request) -> StreamingResponse:
                     # A sub-agent/tool returned something. A shell command run → terminal
                     # card; anything else → agent-to-agent trace.
                     if text.strip():
+                        # Pull out any file-change diffs (from codebase_op write/edit) → diff cards.
+                        changes, text = _extract_file_changes(text)
+                        for fc in changes:
+                            key = ("diff", fc["path"], fc["diff"])
+                            if key not in seen_results:
+                                seen_results.add(key)
+                                fc_log.append(fc)
+                                yield _sse({"type": "file_change", **fc})
+                    if text.strip():
                         cmd = _parse_command(text)
                         if cmd:
                             key = ("cmd", cmd.get("command", ""), cmd.get("output", ""))
@@ -1826,7 +1851,8 @@ async def chat(request: Request) -> StreamingResponse:
 
             if answer or suggested:
                 store.add_message(conv_id, "ai", answer, sources, build=suggested or "",
-                                  trace=trace_log[-60:], commands=cmd_log[-30:])
+                                  trace=trace_log[-60:], commands=cmd_log[-30:],
+                                  file_changes=fc_log[-30:])
             if new_ctx is not None:
                 store.set_context(conv_id, new_ctx)
             if checklist:

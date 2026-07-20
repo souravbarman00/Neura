@@ -13,10 +13,27 @@ sub-agent's instructions, which must get an explicit yes before invoking them.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
+
+MAX_DIFF_LINES = 400
+
+
+def _diff_block(rel: str, kind: str, old: str, new: str) -> str:
+    """A machine-parseable unified-diff block appended to a write/edit result. The backend
+    extracts it into a `file_change` UI event (rendered as a diff card) and strips it from
+    the trace. Capped so large files don't blow up the context."""
+    diff = [d for d in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=3)
+            if not (d.startswith("--- ") or d.startswith("+++ "))]
+    if not diff:
+        return ""
+    if len(diff) > MAX_DIFF_LINES:
+        extra = len(diff) - MAX_DIFF_LINES
+        diff = diff[:MAX_DIFF_LINES] + [f"… (+{extra} more lines)"]
+    return f"\n<<NEURA_DIFF:{kind}:{rel}>>\n" + "\n".join(diff) + "\n<<END_DIFF>>"
 
 from neuro_san.interfaces.coded_tool import CodedTool
 
@@ -165,11 +182,14 @@ class CodebaseTool(CodedTool):
         if content is None:
             return "Provide 'content' to write."
         existed = target.exists()
+        old = target.read_text(encoding="utf-8", errors="replace") if existed else ""
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(str(content), encoding="utf-8")
         n = str(content).count("\n") + 1
         verb = "Overwrote" if existed else "Created"
-        return f"{verb} {target.relative_to(root)} ({n} lines, {len(str(content))} bytes)."
+        rel = str(target.relative_to(root))
+        return (f"{verb} {rel} ({n} lines, {len(str(content))} bytes)."
+                + _diff_block(rel, "overwrite" if existed else "create", old, str(content)))
 
     def _edit(self, target: Path, root: Path, args: Dict[str, Any]) -> str:
         if not target.is_file():
@@ -186,8 +206,10 @@ class CodebaseTool(CodedTool):
         if count > 1:
             return (f"The 'old' text appears {count} times — it must be unique. "
                     "Include more surrounding context so it matches exactly once.")
-        target.write_text(text.replace(old, new, 1), encoding="utf-8")
-        return f"Edited {target.relative_to(root)} (1 replacement)."
+        after = text.replace(old, new, 1)
+        target.write_text(after, encoding="utf-8")
+        rel = str(target.relative_to(root))
+        return f"Edited {rel} (1 replacement)." + _diff_block(rel, "edit", text, after)
 
     def _run(self, root: Path, args: Dict[str, Any]) -> str:
         command = (args.get("command") or "").strip()

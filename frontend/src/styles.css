@@ -1025,3 +1025,34 @@ button { font-family: inherit; }
   .modal { border-radius: 14px; padding: 18px; }
   .modal-scrim { padding: 12px; }
 }
+
+/* ---------- File-change diff cards (codebase agent edits) ---------- */
+.msg-changes { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.diff-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.diff-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 12px; background: var(--field); border: none; cursor: pointer;
+  font: inherit; text-align: left; color: var(--fg);
+}
+.diff-head:hover { background: var(--hover, var(--elevated)); }
+.diff-chev { width: 14px; height: 14px; stroke: var(--fg-muted); transform: rotate(-90deg); transition: transform 0.15s; flex: none; }
+.diff-chev.open { transform: rotate(0deg); }
+.diff-kind {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 6px; flex: none;
+}
+.diff-file { font-family: "JetBrains Mono", monospace; font-size: 12.5px; font-weight: 600; flex: none; }
+.diff-path { font-size: 11px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.diff-stat { display: flex; gap: 8px; font-family: "JetBrains Mono", monospace; font-size: 11.5px; font-weight: 600; flex: none; }
+.diff-plus { color: #3fb950; }
+.diff-minus { color: #f85149; }
+.diff-body {
+  margin: 0; max-height: 380px; overflow: auto;
+  font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.5;
+  background: var(--bg, #0b0e15);
+}
+.diff-line { padding: 0 12px; white-space: pre; }
+.diff-ctx { color: var(--fg-soft); }
+.diff-add { background: rgba(63, 185, 80, 0.14); color: #6fd38a; }
+.diff-del { background: rgba(248, 81, 73, 0.14); color: #ff8b84; }
+.diff-hunk { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
