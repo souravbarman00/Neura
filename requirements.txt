@@ -14,3 +14,4 @@ playwright>=1.44
 python-pptx>=1.0
 fpdf2>=2.8
 # image gen uses OpenAI images API via httpx (no openai SDK needed)
+rich>=13

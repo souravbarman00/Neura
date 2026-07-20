@@ -20,6 +20,12 @@ __pycache__/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/dist-ext/
+
+# VS Code extension build outputs (source is in vscode-extension/)
+vscode-extension/out/
+vscode-extension/node_modules/
+*.vsix
 
 # Screenshots / audio / misc
 design/*.png
@@ -31,3 +37,6 @@ design/*.png
 *.dmg
 dist-app/
 dist-standalone/
+
+# Local agent/editor config
+.claude/

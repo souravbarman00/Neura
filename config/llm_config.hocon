@@ -5,10 +5,10 @@
     #   Anthropic / OpenAI: native neuro-san classes (use "model_name").
     #   Mistral: wired via ChatMistralAI (uses "model").
 
-    # --- Active: OpenAI (GPT) ---
+    # --- Active: Mistral AI ---
     "llm_config": {
-        "class": "openai",
-        "model_name": "gpt-5.2",
+        "class": "langchain_mistralai.chat_models.ChatMistralAI",
+        "model": "mistral-large-latest",
         "temperature": 0.2
     }
 
@@ -19,10 +19,10 @@
     #     "temperature": 0.2
     # }
 
-    # --- Preset: Mistral AI ---
+    # --- Preset: OpenAI (GPT) ---
     # "llm_config": {
-    #     "class": "langchain_mistralai.chat_models.ChatMistralAI",
-    #     "model": "mistral-large-latest",
+    #     "class": "openai",
+    #     "model_name": "gpt-5.4",
     #     "temperature": 0.2
     # }
 }

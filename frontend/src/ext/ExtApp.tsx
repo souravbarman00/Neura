@@ -1,6 +1,19 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "../useChat";
-import { listConversations, deleteConversation, type Conversation } from "../api";
+import { API_BASE, listConversations, deleteConversation, type Conversation } from "../api";
+
+// VS Code webview bridge (call acquireVsCodeApi exactly once).
+const IN_VSCODE = typeof window !== "undefined" && (window as any).__NEURA_IN_VSCODE__ === true;
+let _vscode: any;
+function vscodeApi() {
+  if (_vscode === undefined) {
+    _vscode =
+      typeof (window as any).acquireVsCodeApi === "function"
+        ? (window as any).acquireVsCodeApi()
+        : null;
+  }
+  return _vscode;
+}
 import Thread from "../components/Thread";
 import NetworkView from "../components/NetworkView";
 import TaskPanel from "../components/TaskPanel";
@@ -21,6 +34,81 @@ export default function ExtApp() {
   const [showHistory, setShowHistory] = useState(false);
   const [convos, setConvos] = useState<Conversation[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Backend health gate (extension only): show a Start screen until the servers are up.
+  const [backendUp, setBackendUp] = useState<boolean | null>(IN_VSCODE ? null : true);
+  const [starting, setStarting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  useEffect(() => {
+    if (!IN_VSCODE) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const ping = async () => {
+      let ok = false;
+      try {
+        const r = await fetch(`${API_BASE}/api/health`);
+        ok = r.ok;
+      } catch {
+        ok = false;
+      }
+      if (cancelled) return;
+      setBackendUp(ok);
+      timer = setTimeout(ping, ok ? 12000 : 3000);
+    };
+    ping();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  function startNeura() {
+    vscodeApi()?.postMessage({ type: "startNeura" });
+    setStarting(true);
+  }
+
+  if (IN_VSCODE && backendUp !== true) {
+    return (
+      <div className="ext-start">
+        <div className="ext-orb big" />
+        <h2>Neura</h2>
+        {backendUp === null && !starting ? (
+          <p className="ext-start-sub">Connecting…</p>
+        ) : (
+          <>
+            <p className="ext-start-sub">
+              {starting ? "Starting Neura…" : "Neura isn't running yet."}
+            </p>
+            <button className="ext-start-btn" onClick={startNeura} disabled={starting}>
+              {starting ? "Starting…" : "▶  Start Neura"}
+            </button>
+            <button className="ext-help-link" onClick={() => setHelpOpen((v) => !v)}>
+              {helpOpen ? "Hide help" : "Need help?"}
+            </button>
+            {starting && (
+              <p className="ext-start-note">
+                First run installs packages (a few minutes) in the “Neura” terminal. This panel
+                connects automatically once the servers are up.
+              </p>
+            )}
+            {helpOpen && (
+              <div className="ext-help">
+                <p><b>Start Neura</b> installs dependencies and runs all servers in a terminal.</p>
+                <ol>
+                  <li>Click <b>Start Neura</b> and pick your Neura project folder (the repo with
+                    <code>scripts/start_neura.sh</code>) — asked once.</li>
+                  <li>Keep the <b>Neura</b> terminal open; press <b>Ctrl-C</b> there to stop.</li>
+                  <li>If prompted, add an LLM key to the project's <code>.env</code>
+                    (<code>ANTHROPIC_API_KEY=…</code> or <code>OPENAI_API_KEY=…</code>) and Start again.</li>
+                </ol>
+                <p>Set the backend URL / project folder in <b>Settings → Extensions → Neura</b>.</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   async function refreshHistory() {
     try {

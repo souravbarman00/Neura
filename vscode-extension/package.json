@@ -1,0 +1,89 @@
+{
+  "name": "neura-vscode",
+  "displayName": "Neura",
+  "description": "Neura \u2014 your personal AI assistant, right inside VS Code. Chat, live agent trace, network graph, and task checklist; edits the folder you have open.",
+  "version": "0.1.8",
+  "publisher": "sourav",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "icon": "media/logo.png",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neura",
+          "title": "Neura",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "neura": [
+        {
+          "type": "webview",
+          "id": "neura.chat",
+          "name": "Neura"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "neura.openInEditor",
+        "title": "Neura: Open Chat in Editor Tab"
+      },
+      {
+        "command": "neura.start",
+        "title": "Neura: Start Neura (install + run servers)"
+      },
+      {
+        "command": "neura.indexWorkspace",
+        "title": "Neura: Index the Open Folder"
+      },
+      {
+        "command": "neura.reload",
+        "title": "Neura: Reload"
+      }
+    ],
+    "configuration": {
+      "title": "Neura",
+      "properties": {
+        "neura.backendUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8010",
+          "description": "URL of the running Neura backend (the FastAPI UI server)."
+        },
+        "neura.autoWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Point Neura's `dev` agent at the folder you have open in VS Code so it can read/edit those files directly."
+        },
+        "neura.projectPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Neura project (the repo with scripts/start_neura.sh). Used by the 'Start Neura' button. If empty, you'll be prompted to pick it."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "sync-ui": "node scripts/sync-ui.js",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}

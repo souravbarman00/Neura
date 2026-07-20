@@ -137,3 +137,37 @@ html, body, #root { height: 100%; margin: 0; }
   color: var(--fg-muted, #7b8194); font-size: 12px; padding: 6px 8px; border-radius: 8px;
 }
 .ext-conv-del:hover { color: #e5484d; background: rgba(229,72,77,.12); }
+
+/* Start screen (extension: shown until the backend is up) */
+.ext-start {
+  height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  gap: 10px; padding: 24px; background: var(--bg, #0b0e15); color: var(--fg, #e6e9f0);
+}
+.ext-start h2 { margin: 2px 0 0; font-size: 18px; font-weight: 700; }
+.ext-orb.big {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #a5a5ff, #4f46e5);
+  box-shadow: 0 0 30px -6px #4f46e5;
+}
+.ext-start-sub { color: var(--fg-muted, #7b8194); font-size: 13px; margin: 0; }
+.ext-start-btn {
+  margin-top: 8px; padding: 11px 20px; border: none; border-radius: 11px;
+  background: linear-gradient(135deg, #7c7cf6, #4f46e5); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
+}
+.ext-start-btn:disabled { opacity: .65; cursor: default; }
+.ext-help-link {
+  background: none; border: none; color: var(--fg-muted, #7b8194);
+  font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; padding: 4px;
+}
+.ext-start-note { color: var(--fg-muted, #7b8194); font-size: 12px; max-width: 300px; line-height: 1.5; }
+.ext-help {
+  text-align: left; max-width: 320px; margin-top: 6px;
+  background: var(--panel, #141a26); border: 1px solid var(--line, #2a3350);
+  border-radius: 11px; padding: 12px 14px; font-size: 12.5px; line-height: 1.55;
+  color: var(--fg-soft, #b8bfd0);
+}
+.ext-help ol { margin: 6px 0 6px 18px; padding: 0; }
+.ext-help li { margin: 4px 0; }
+.ext-help code { background: var(--hover, #1c2333); padding: 1px 5px; border-radius: 5px; font-size: 11.5px; }

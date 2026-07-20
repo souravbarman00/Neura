@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Neura CLI launcher — runs the terminal client with the project's venv.
+# Add to PATH (e.g. `ln -s "$PWD/scripts/neura" /usr/local/bin/neura`) to run `neura` anywhere;
+# the CLI uses your CURRENT directory as the workspace, so run it inside the project you want.
+
+# Resolve this script's real location even when invoked through a symlink on PATH.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+
+PY="$ROOT/.venv/bin/python"
+[ -x "$PY" ] || PY="python3"
+exec "$PY" "$ROOT/cli/neura.py" "$@"
