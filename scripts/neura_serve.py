@@ -42,12 +42,17 @@ def load_env() -> None:
     if not envf.exists() and (ROOT / ".env.example").exists():
         shutil.copyfile(ROOT / ".env.example", envf)
     if envf.exists():
-        for line in envf.read_text(encoding="utf-8", errors="replace").splitlines():
+        # utf-8-sig strips a BOM (Windows editors often add one, which would corrupt the
+        # first key name). Override os.environ so edited .env values take effect on re-run.
+        for line in envf.read_text(encoding="utf-8-sig", errors="replace").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, _, v = line.partition("=")
-            os.environ.setdefault(k.strip(), v.strip())
+            v = v.strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                v = v[1:-1]
+            os.environ[k.strip()] = v
 
 
 def ensure_venv() -> None:

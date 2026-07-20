@@ -1388,7 +1388,37 @@ def _write_env(config: dict) -> None:
     lines = ["# Neura environment (managed; contains secrets — gitignored)"]
     lines += [f"{k}={v}" for k, v in existing.items()]
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    ENV_FILE.chmod(0o600)
+    try:
+        ENV_FILE.chmod(0o600)  # no-op on Windows
+    except Exception:  # noqa: BLE001
+        pass
+    # Update the LIVE process env too, so a subsequent runtime restart (and this
+    # process's own key checks / image_gen) sees the new values immediately.
+    for k, v in config.items():
+        if v is not None and str(v) != "":
+            os.environ[k] = str(v)
+
+
+def _dotenv_values() -> dict:
+    """Parse .env into a dict (BOM-safe, strips surrounding quotes). Used to feed the
+    freshest keys to a restarted runtime, even if they were added after this process
+    started (so os.environ is stale)."""
+    vals: dict[str, str] = {}
+    if not ENV_FILE.exists():
+        return vals
+    try:
+        for line in ENV_FILE.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            v = v.strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                v = v[1:-1]
+            vals[k.strip()] = v
+    except Exception:  # noqa: BLE001
+        pass
+    return vals
 
 
 def _kill_runtime() -> None:
@@ -1420,6 +1450,7 @@ def _restart_runtime() -> None:
     launcher sets, so it works on Windows, macOS, and Linux."""
     _kill_runtime()
     env = dict(os.environ)
+    env.update(_dotenv_values())  # freshest .env keys win over a stale os.environ
     # RELATIVE manifest paths (resolved against cwd=ROOT): neuro-san splits
     # AGENT_MANIFEST_FILE on spaces, so an absolute path under a spaces folder crashes.
     env["AGENT_MANIFEST_FILE"] = os.path.join("registries", "manifest.hocon")
