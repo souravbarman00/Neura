@@ -7,18 +7,51 @@ import { Speaker, Stop, Wand, ExternalLink, ChevronDown } from "../icons";
 import { speak, type Speaker as VoiceSpeaker } from "../voice";
 import { speechify } from "../api";
 import { parseChoices } from "../choices";
+import { API_BASE } from "../api";
 import TraceList from "./TraceList";
 import CommandCard from "./CommandCard";
 
 // Rich, modern renderers: links open in a new tab (with an external-link icon),
 // tables scroll horizontally on overflow.
+const DOWNLOAD_EXT = /\.(pdf|pptx|docx|xlsx|csv|zip|plain-text|md)(\?|$)/i;
+
 const MD_COMPONENTS = {
-  a: ({ href, children }: any) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="md-link">
-      {children}
-      <ExternalLink className="md-ext" />
-    </a>
-  ),
+  a: ({ href, children }: any) => {
+    let url = typeof href === "string" ? href : "";
+    if (url.startsWith("/")) url = API_BASE + url; // artifact/download paths → backend base
+    // A generated file (PDF/PPTX/…) → a download card instead of a plain link.
+    if (DOWNLOAD_EXT.test(url)) {
+      const fname = url.split("/").pop()?.split("?")[0] || "file";
+      return (
+        <a href={url} download={fname} target="_blank" rel="noopener noreferrer" className="md-download">
+          <span className="md-dl-icon">⬇</span>
+          <span className="md-dl-text">{children}</span>
+        </a>
+      );
+    }
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="md-link">
+        {children}
+        <ExternalLink className="md-ext" />
+      </a>
+    );
+  },
+  // Media from the browser tool: .webm/.mp4 → a <video> player; everything else →
+  // a click-to-open screenshot.
+  img: ({ src, alt }: any) => {
+    let url = typeof src === "string" ? src : "";
+    // Same-origin artifact paths (screenshots/recordings) need the backend base
+    // when hosted cross-origin (e.g. the VS Code webview).
+    if (url.startsWith("/")) url = API_BASE + url;
+    if (/\.(webm|mp4)(\?|$)/i.test(url)) {
+      return <video className="md-media" src={url} controls playsInline preload="metadata" />;
+    }
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="md-shot">
+        <img className="md-media" src={url} alt={alt || "screenshot"} loading="lazy" />
+      </a>
+    );
+  },
   table: ({ children }: any) => (
     <div className="md-table-wrap">
       <table>{children}</table>

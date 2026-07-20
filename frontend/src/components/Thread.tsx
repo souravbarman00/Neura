@@ -17,11 +17,12 @@ interface Props {
   onRevertAuto?(): void;
   animatingId?: string | null;
   userInitials?: string;
+  imagePending?: boolean;
 }
 
 const SUGGESTIONS = ["What is Neuro SAN?", "Summarize my projects", "How are coded tools defined?"];
 
-export default function Thread({ messages, activity, liveTrace, liveCommands, busy, onQuick, onBuild, onApprove, autoApprove, onRevertAuto, animatingId, userInitials }: Props) {
+export default function Thread({ messages, activity, liveTrace, liveCommands, busy, onQuick, onBuild, onApprove, autoApprove, onRevertAuto, animatingId, userInitials, imagePending }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -110,6 +111,12 @@ export default function Thread({ messages, activity, liveTrace, liveCommands, bu
               </div>
             </div>
           )}
+        </div>
+      )}
+      {imagePending && (
+        <div className="img-gen">
+          <div className="img-gen-skel" />
+          <div className="img-gen-cap">✨ Generating image…</div>
         </div>
       )}
       {autoApprove && (

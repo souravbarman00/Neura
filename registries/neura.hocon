@@ -32,6 +32,7 @@
         # ================================================================
         {
             "name": "neura",
+            "llm_config": { "class": "anthropic", "model_name": "claude-opus-4-1" },
             "function": {
                 "description": "I'm Neura, your personal AI assistant. Ask me anything about your work, notes, files, or projects — I answer from your own private knowledge."
             },
@@ -52,6 +53,16 @@ Therefore:
   transform, math/date logic, or to verify a numeric/logical claim, write Python and run it with
   `python_run`, then report its real printed output — don't compute in your head. (`python_run` is a
   sandboxed temp dir; it only computes and needs NO approval.)
+- GENERATE IMAGES with `image_gen` (direct): when the user asks to draw / generate / create /
+  illustrate an image, picture, logo, icon, or art, call `image_gen` with a vivid, detailed `prompt`
+  (optionally `size`). It returns the image as inline markdown — relay it AS-IS (keep the
+  ![…](/artifacts/…) reference). It always uses OpenAI (needs OPENAI_API_KEY) regardless of the chat
+  model, and needs NO approval. If OPENAI_API_KEY is missing, say so plainly.
+- MAKE A DOCUMENT with `make_document` (direct): when the user asks for a PDF or a PPTX / slide deck /
+  presentation, write the full content yourself, then call `make_document` with `format` ("pdf" or
+  "pptx"), a `title`, and `content` as markdown (use `#`/`##` headings — in a PPTX each heading is a
+  new slide — and `-` bullets). It returns a download link — relay it AS-IS (keep the
+  [📄 …](/artifacts/…) link) so the user can download it from the chat. Needs NO approval.
 - CODE / FILES / COMMANDS / GIT go through the `dev` router (never claim a change happened unless
   `dev` returned a real success line — a "Created/Overwrote/Edited…" or a real commit sha+branch —
   which you then quote and verify). Local files/commands vs GitHub is a real fork: if the user
@@ -91,8 +102,11 @@ answer. The four routers: ====
 - `knowledge` — find information: the user's own notes/files/projects (local + "about me" index)
   AND public facts / current events / how-tos from the web. Read-only; cites sources.
 - `dev` — anything code/machine: read/search/edit/create files & run commands in THIS chat's
-  workspace, general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud), and GitHub
-  (repos/branches/PRs/issues/reviews on github.com).
+  workspace, general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud), GitHub
+  (repos/branches/PRs/issues/reviews on github.com), AND a real headless browser (Playwright) to
+  SCREENSHOT a web page, RECORD a video of a browsing session, or INSPECT a page for issues
+  (console errors, failed/4xx-5xx requests). Any "screenshot / open / record / debug this URL or
+  localhost:<port>" request goes to `dev` — you DO have this via `dev`; never say you can't.
 - `workplace` — your work SaaS: Jira (tickets/sprints), Confluence (wiki pages), Slack (messages/
   channels/DMs — the default for any "message/notify/ping the team"), Outlook (email + calendar),
   and Microsoft Teams (chats/channels).
@@ -107,7 +121,8 @@ LEAF-42" or "run the tests" means PREPARE it. For each such action, reply with a
 (exact target + content/command) ending EXACTLY with "Shall I proceed? (yes/no)", then STOP. Do it
 only after the user says yes. One action per confirmation — never batch. Exception: if the user has
 said to stop asking / always proceed this conversation, act without the prompt. Read-only steps
-(reads, searches, `knowledge`, `python_run` compute) NEVER gate.
+(reads, searches, `knowledge`, `python_run` compute, `image_gen`, `make_document`, and browser
+screenshot/inspect of a page) NEVER gate.
 WHEN THE USER APPROVES ("yes"): re-invoke the router with the FULL action restated PLUS an explicit
 "The user has APPROVED — perform it now; do NOT ask again." Routers are stateless between your
 calls, so a bare "yes" makes them re-propose and loop forever. After it runs, relay the real result
@@ -175,7 +190,7 @@ Put nothing after that line. Only when a genuinely new capability is needed.
                     "class": "middleware.creator_signature_middleware.CreatorSignatureMiddleware"
                 }
             ],
-            "tools": ["knowledge", "dev", "workplace", "design", "python_run", "workflow_memory"]
+            "tools": ["knowledge", "dev", "workplace", "design", "python_run", "image_gen", "make_document", "workflow_memory"]
         },
 
         # ================================================================
@@ -184,6 +199,7 @@ Put nothing after that line. Only when a genuinely new capability is needed.
         # ================================================================
         {
             "name": "knowledge",
+            "llm_config": { "class": "anthropic", "model_name": "claude-opus-4-1" },
             "function": {
                 "description": "Find information and answer with citations: the user's own notes/files/projects (on-device index) and public facts / current events / how-tos from the web.",
                 "parameters": {
@@ -221,8 +237,9 @@ Return a concise, well-cited answer to the caller.
         # ================================================================
         {
             "name": "dev",
+            "llm_config": { "class": "anthropic", "model_name": "claude-opus-4-1" },
             "function": {
-                "description": "Anything code or machine: read/search/edit/create files and run commands in this chat's workspace; general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud); and GitHub (repos, branches, PRs, issues, reviews). Writes and command runs are human-approved.",
+                "description": "Anything code or machine: read/search/edit/create files and run commands in this chat's workspace; general shell/CLI on the machine (installs, scripts, git/gh/az/gcloud); GitHub (repos, branches, PRs, issues, reviews); and a real headless browser (Playwright) to screenshot a web page, record a video of a session, or inspect a page for issues (console errors, failed requests). Writes and command runs are human-approved.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -241,8 +258,11 @@ A) `codebase_op` — operate on a local project on disk (defaults to THIS chat's
    pass `root`=<absolute path> on EVERY op to work in a repo the user names that isn't indexed).
    Actions (pass `action` + fields; add `root` for a non-workspace repo):
    - action="list"   path=<dir>  — list files/subfolders (defaults to the root).
+   - action="find"   query=<filename or glob> — locate files by NAME (e.g. "UserService.ts" or
+     "*.hocon"); returns paths only (cheap — no file contents).
    - action="read"   path=<file> [start=<n> max_lines=<n>] — read with line numbers.
-   - action="search" query=<text> — grep the workspace.
+   - action="search" query=<text> — grep file CONTENTS (last resort; can return a lot — prefer the
+     locate flow below).
    - action="write"  path=<file> content=<full new file text> — create or overwrite (USE THIS for
      writing file content — it takes the text as a parameter; never a terminal heredoc).
    - action="edit"   path=<file> old=<exact existing text> new=<replacement> — `old` must appear
@@ -250,6 +270,19 @@ A) `codebase_op` — operate on a local project on disk (defaults to THIS chat's
    - action="run"    command=<shell cmd> — run in the workspace as cwd (npm test, pytest, git…).
    There is NO "insert at line N": to change a file, read it, build the full new content, and
    `write` it (or `edit` a unique snippet). Always read a file before editing.
+
+   LOCATING A FILE the user didn't name (do this instead of blindly grepping — it saves tokens):
+   1. If the user NAMED a file (even loosely, e.g. "the login component"), use `codebase_op`
+      action="find" with that name/glob to get the exact path.
+   2. If the user described BEHAVIOUR ("the function that validates emails", "where we call Stripe"),
+      use `knowledge_search` (scope="local") FIRST — the chat's workspace is indexed, so it returns
+      the relevant passages WITH their `source` file path. Read/edit that file directly.
+   3. Only fall back to action="search" (content grep) if the index has nothing or the workspace
+      isn't indexed. Don't re-scan the tree on every request once you know the path.
+   IF THIS CHAT HAS NO WORKSPACE (codebase_op says "No target folder"/"no workspace"): ask the user
+   to index the folder they're working in via 'Add to knowledge base → This chat' (or give you its
+   absolute `root` path). Explain that indexing lets you jump straight to the right file instead of
+   searching every time. Do this ONCE, then proceed.
 B) `shell_run` — general shell NOT tied to a workspace: mkdir, run scripts, install pip/npm/brew,
    git/gh/az/gcloud outside a project, curl, versions. Pass `command` (required), optional `cwd`
    (defaults to the user's home), optional `timeout`. For git or any project command you MUST set
@@ -260,6 +293,19 @@ B) `shell_run` — general shell NOT tied to a workspace: mkdir, run scripts, in
 C) The GitHub MCP tools — REMOTE work on github.com: read repos/code/issues/PRs; create branches/
    files; open PRs; add/reply/RESOLVE review comments. These create NO local file — they are remote
    commits; always report the real commit SHA, the exact BRANCH, and the file URL.
+D) `browser` — drive a real (headless) browser with Playwright to SEE or diagnose a web page.
+   Pass `url` and `action`:
+   - action="screenshot" — capture the page (add full_page="true" for the whole scrollable page).
+   - action="inspect"    — diagnose issues: returns console errors/warnings, uncaught page errors,
+     failed requests and 4xx/5xx responses, plus a screenshot. USE THIS when the user reports a page
+     "not working / broken / erroring / blank".
+   - action="video"      — record a .webm of the session (to reproduce a bug or show a flow).
+   Optional `steps` = a list of simple actions run in order before capturing, e.g.
+     ["goto:https://…", "fill:#email|me@x.com", "click:text=Sign in", "waitfor:.dashboard",
+      "scroll:bottom", "wait:1000"]. The tool returns markdown that renders the screenshot/video
+   inline — relay it as-is (keep the ![…](/artifacts/…) reference) so the user sees the image/clip.
+   This is READ-ONLY on the user's machine (no approval gate needed), but it DOES load whatever URL
+   you give it — only visit URLs the user asked about.
 
 LOCAL vs GITHUB: if the caller didn't make clear whether a change is local-on-disk (codebase_op /
 shell_run) or remote-on-GitHub (MCP), ask before writing.
@@ -286,7 +332,7 @@ If `codebase_op` says the chat has no workspace folder, tell the user to add one
 knowledge base → This chat'. If GitHub returns an auth error, say GITHUB_MCP_TOKEN is missing or
 lacks scope and point to the Configuration panel. Be concise; show paths, diffs, and output plainly.
 """,
-            "tools": ["codebase_op", "shell_run", "https://api.githubcopilot.com/mcp"]
+            "tools": ["codebase_op", "knowledge_search", "shell_run", "browser", "https://api.githubcopilot.com/mcp"]
         },
 
         # ================================================================
@@ -296,6 +342,7 @@ lacks scope and point to the Configuration panel. Be concise; show paths, diffs,
         # ================================================================
         {
             "name": "workplace",
+            "llm_config": { "class": "openai", "model_name": "gpt-5.4" },
             "function": {
                 "description": "Your work SaaS: Jira (tickets, sprints, boards), Confluence (wiki pages/spaces), Slack (messages/channels/DMs — default for any 'message/notify the team'), Outlook (email + calendar), and Microsoft Teams (chats/channels). Reads are direct; writes are human-approved.",
                 "parameters": {
@@ -443,6 +490,41 @@ user to set FIGMA_TOKEN in Configuration.
             },
             "class": "neura.python_tool.PythonRun"
         },
+
+        # ---- Coded tool: generate an image from a prompt (OpenAI; renders inline) ----
+        {
+            "name": "image_gen",
+            "function": {
+                "description": "Generate an image from a text prompt using OpenAI (gpt-image-1 / dall-e-3). Returns the image as inline markdown. Always uses OPENAI_API_KEY regardless of the chat's LLM provider.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "A vivid, detailed description of the image to create."},
+                        "size": {"type": "string", "description": "Optional: 1024x1024 (default), 1536x1024, 1024x1536, 1792x1024, or 1024x1792."}
+                    },
+                    "required": ["prompt"]
+                }
+            },
+            "class": "neura.image_tool.ImageGenerate"
+        },
+
+        # ---- Coded tool: build a downloadable PDF or PPTX ----
+        {
+            "name": "make_document",
+            "function": {
+                "description": "Create a downloadable PDF or PPTX from a title + markdown-ish content (# / ## headings, - bullets). In a PPTX each heading becomes a slide. Returns a download link rendered inline in chat.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "format": {"type": "string", "description": "'pdf' or 'pptx'."},
+                        "title": {"type": "string", "description": "Document / deck title."},
+                        "content": {"type": "string", "description": "The full body as markdown: '#'/'##' headings (new slide per heading in PPTX) and '-' bullet lines."}
+                    },
+                    "required": ["format", "content"]
+                }
+            },
+            "class": "neura.document_tool.MakeDocument"
+        },
         {
             # ---- Workflow memory: per-conversation JSON store for the current task ----
             "name": "workflow_memory",
@@ -480,13 +562,13 @@ user to set FIGMA_TOKEN in Configuration.
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "action": {"type": "string", "description": "One of: list, read, search, write, edit, run."},
+                        "action": {"type": "string", "description": "One of: list, find, read, search, write, edit, run."},
                         "root": {"type": "string", "description": "Optional absolute path of the repo/dir to work in. Defaults to this chat's indexed workspace. Set it to edit a repo the user names that isn't indexed (e.g. /Users/me/project)."},
                         "path": {"type": "string", "description": "File or directory path relative to root (for list/read/write/edit)."},
                         "content": {"type": "string", "description": "Full file contents (for action=write)."},
                         "old": {"type": "string", "description": "Exact existing text to replace (for action=edit); must be unique in the file."},
                         "new": {"type": "string", "description": "Replacement text (for action=edit)."},
-                        "query": {"type": "string", "description": "Text/pattern to grep for (for action=search)."},
+                        "query": {"type": "string", "description": "For action=find: a filename or glob (returns paths only). For action=search: text/pattern to grep in file contents."},
                         "command": {"type": "string", "description": "Shell command to run in the workspace (for action=run)."},
                         "start": {"type": "string", "description": "1-based start line (optional, for action=read)."},
                         "max_lines": {"type": "string", "description": "Number of lines to read (optional, for action=read)."}
@@ -513,6 +595,26 @@ user to set FIGMA_TOKEN in Configuration.
                 }
             },
             "class": "neura.shell_tool.ShellRun"
+        },
+
+        # ---- Headless browser (Playwright): screenshot / inspect / record video ----
+        {
+            "name": "browser",
+            "function": {
+                "description": "Drive a real headless browser to screenshot a page, record a video of a session, or inspect a page for issues (console errors, page errors, failed/4xx-5xx requests). Returns markdown with the image/clip inline.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "The page URL to open (e.g. https://example.com or http://localhost:3000)."},
+                        "action": {"type": "string", "description": "'screenshot' (default), 'inspect', or 'video'."},
+                        "steps": {"type": "array", "items": {"type": "string"}, "description": "Optional interaction steps run in order before capturing, e.g. 'goto:URL', 'click:SELECTOR', 'fill:SELECTOR|VALUE', 'press:Enter', 'waitfor:SELECTOR', 'wait:MS', 'scroll:bottom'."},
+                        "full_page": {"type": "string", "description": "For screenshots: 'true' to capture the full scrollable page (default 'false')."},
+                        "timeout": {"type": "string", "description": "Optional overall timeout in seconds (default 45, max 180)."}
+                    },
+                    "required": ["url"]
+                }
+            },
+            "class": "neura.browser_tool.BrowserTool"
         },
 
         # ---- Jira REST (used by the `workplace` router) ----

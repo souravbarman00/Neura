@@ -8,6 +8,8 @@ import RightPanel from "./components/RightPanel";
 import BuildAgentModal from "./components/BuildAgentModal";
 import KnowledgeModal from "./components/KnowledgeModal";
 import NetworkView from "./components/NetworkView";
+import AgentLlmModal from "./components/AgentLlmModal";
+import type { NodeDetails } from "./studio/graph/layout";
 import TaskPanel from "./components/TaskPanel";
 import WorkflowMemoryPanel from "./components/WorkflowMemoryPanel";
 import ResearchRadarModal from "./components/ResearchRadarModal";
@@ -61,6 +63,7 @@ export default function App() {
   const [activity, setActivity] = useState<string | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null); // aborts the in-flight chat stream
   const [runtimeOk, setRuntimeOk] = useState(true);
   const [model, setModel] = useState("…");
   const [kbChunks, setKbChunks] = useState<number | null>(null);
@@ -72,6 +75,8 @@ export default function App() {
   const [workspace, setWorkspace] = useState<{ path: string; chunks: number } | null>(null);
   const [watch, setWatch] = useState<WatchStatus | null>(null);
   const [netOpen, setNetOpen] = useState(true); // graph pane visible by default (collapsible)
+  const [editAgent, setEditAgent] = useState<{ name: string; details: NodeDetails } | null>(null);
+  const [graphRefresh, setGraphRefresh] = useState(0); // bump to refetch the graph after an edit
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
@@ -79,6 +84,7 @@ export default function App() {
   const [liveCommands, setLiveCommands] = useState<CommandRun[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
+  const [imagePending, setImagePending] = useState(false);
   const [leftTab, setLeftTab] = useState<"checklist" | "memory">("checklist");
   const [wmRefresh, setWmRefresh] = useState(0);
   const [radarOpen, setRadarOpen] = useState(false);
@@ -322,9 +328,15 @@ export default function App() {
     refreshNetworks();
   }
 
+  async function stop() {
+    abortRef.current?.abort();
+  }
+
   async function send(text: string, opts?: { onAnswerStream?: (full: string) => void }): Promise<string> {
     if (busy) return "";
     let finalAnswer = "";
+    const ac = new AbortController();
+    abortRef.current = ac;
     setBusy(true);
     setSources([]);
     setLogs([]);
@@ -334,6 +346,7 @@ export default function App() {
     // conversation and only appends new steps. The stream re-emits the current
     // plan (and any updates) so it continues instead of restarting.
     setProgress(null);
+    setImagePending(false);
     setActiveNodes(new Set());
     setActiveEdges(new Set());
     setMessages((m) => [...m, { id: nextId(), role: "user", text }]);
@@ -397,13 +410,20 @@ export default function App() {
           },
           onCommand: (c) => {
             cmds.push(c);
-            setLiveCommands([...cmds]);
+            // Before the answer bubble exists, show commands in the live block; once it
+            // exists they live INSIDE the message — clear the live block so the same
+            // terminal cards don't render twice (that double-render was confusing).
             if (created) {
+              setLiveCommands([]);
               setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, commands: [...cmds] } : msg)));
+            } else {
+              setLiveCommands([...cmds]);
             }
           },
           onAnswer: (t) => {
             setActivity(null);
+            setImagePending(false);
+            setLiveCommands([]); // commands now live inside the message bubble
             finalAnswer = t;
             opts?.onAnswerStream?.(t);
             setMessages((m) => {
@@ -430,22 +450,37 @@ export default function App() {
             if (items.length) setRightOpen(true); // reveal the Task Plan panel for complex jobs
           },
           onProgress: (value) => setProgress(value),
+          onImagePending: () => setImagePending(true),
           onError: (msg) => {
             setActivity(null);
             setMessages((m) => [...m, { id: nextId(), role: "ai", text: "⚠️ " + msg }]);
           },
-        }
+        },
+        ac.signal
       );
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { id: nextId(), role: "ai", text: "⚠️ Could not reach Neura. Is the server running?" },
-      ]);
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        // User hit Stop — keep whatever already streamed and mark it stopped.
+        if (created) {
+          setMessages((m) =>
+            m.map((msg) => (msg.id === aiId ? { ...msg, text: (msg.text || "") + "\n\n_⏹ Stopped._" } : msg))
+          );
+        } else {
+          setMessages((m) => [...m, { id: aiId, role: "ai", text: "_⏹ Stopped._" }]);
+        }
+      } else {
+        setMessages((m) => [
+          ...m,
+          { id: nextId(), role: "ai", text: "⚠️ Could not reach Neura. Is the server running?" },
+        ]);
+      }
     }
+    abortRef.current = null;
     setActivity(null);
     setLiveTrace([]);
     setLiveCommands([]);
     setBusy(false);
+    setImagePending(false);
     setWmRefresh((n) => n + 1); // re-fetch workflow memory (turn may have captured details)
     refreshConversations();
     return finalAnswer;
@@ -553,6 +588,8 @@ export default function App() {
       logs={shownLogs}
       busy={busy}
       onToggle={() => setNetOpen((v) => !v)}
+      onEditAgent={(name, details) => setEditAgent({ name, details })}
+      refreshKey={graphRefresh}
     />
   );
   // User-message avatar initials, derived from the saved profile name (falls back
@@ -572,6 +609,7 @@ export default function App() {
       busy={busy}
       animatingId={animatingId}
       userInitials={userInitials}
+      imagePending={imagePending}
       onApprove={handleApprove}
       autoApprove={autoApprove}
       onRevertAuto={() => setAutoApprove(false)}
@@ -585,6 +623,8 @@ export default function App() {
   const composerEl = (
     <Composer
       disabled={busy}
+      busy={busy}
+      onStop={stop}
       onSend={send}
       placeholder={`Message ${currentTitle}…`}
       workspace={workspace}
@@ -758,6 +798,15 @@ export default function App() {
         }}
         onSaved={(p) => setProfile(p)}
       />
+      {editAgent && (
+        <AgentLlmModal
+          network={currentNetwork}
+          agent={editAgent.name}
+          details={editAgent.details}
+          onClose={() => setEditAgent(null)}
+          onSaved={() => setGraphRefresh((k) => k + 1)}
+        />
+      )}
     </div>
   );
 }

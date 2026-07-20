@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { getConversation, streamChat } from "./api";
+import { getConversation, streamChat, type ChecklistItem } from "./api";
 import type { AgentMsg, CommandRun, Message } from "./types";
 
 // Radar user turns are transmitted with a hidden paper-context preamble; strip it so
@@ -17,6 +17,9 @@ export interface UseChat {
   messages: Message[];
   activity: string | null;
   liveTrace: AgentMsg[];
+  checklist: ChecklistItem[];
+  progress: number | null;
+  imagePending: boolean;
   liveCommands: CommandRun[];
   busy: boolean;
   animatingId: string | null;
@@ -28,6 +31,8 @@ export interface UseChat {
    *  actually sent to the agent — used to inject hidden context (e.g. paper details).
    *  `opts.title` names the saved conversation (e.g. the paper for a Radar session). */
   send(text: string, opts?: { transmit?: string; title?: string }): Promise<string>;
+  /** Abort the in-flight turn (stop the agents). */
+  stop(): void;
   reset(): void;
   /** Reload a previously-saved conversation's messages into this chat. */
   load(id: string): Promise<void>;
@@ -37,6 +42,9 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
   const [messages, setMessages] = useState<Message[]>([]);
   const [activity, setActivity] = useState<string | null>(null);
   const [liveTrace, setLiveTrace] = useState<AgentMsg[]>([]);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [imagePending, setImagePending] = useState(false);
   const [liveCommands, setLiveCommands] = useState<CommandRun[]>([]);
   const [busy, setBusy] = useState(false);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
@@ -45,12 +53,16 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
   const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const convId = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null); // aborts the in-flight stream
 
   function reset(): void {
     setMessages([]);
     setActivity(null);
     setLiveTrace([]);
     setLiveCommands([]);
+    setChecklist([]);
+    setProgress(null);
+    setImagePending(false);
     setBusy(false);
     setAnimatingId(null);
     setActiveNodes(new Set());
@@ -80,9 +92,15 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     );
   }
 
+  function stop() {
+    abortRef.current?.abort();
+  }
+
   async function send(text: string, opts?: { transmit?: string; title?: string }): Promise<string> {
     if (busy) return "";
     let finalAnswer = "";
+    const ac = new AbortController();
+    abortRef.current = ac;
     setBusy(true);
     setLiveTrace([]);
     setLiveCommands([]);
@@ -137,11 +155,19 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
           },
           onCommand: (c) => {
             cmds.push(c);
-            setLiveCommands([...cmds]);
-            if (created) setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, commands: [...cmds] } : x)));
+            // Once the answer bubble exists, commands live inside it — clear the live
+            // block so the same terminal cards don't show twice.
+            if (created) {
+              setLiveCommands([]);
+              setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, commands: [...cmds] } : x)));
+            } else {
+              setLiveCommands([...cmds]);
+            }
           },
           onAnswer: (t) => {
             setActivity(null);
+            setImagePending(false); // the answer carries the image now
+            setLiveCommands([]); // commands now live inside the message bubble
             finalAnswer = t;
             setMessages((m) => {
               if (!created) {
@@ -151,23 +177,39 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
               return m.map((x) => (x.id === aiId ? { ...x, text: t, trace: [...trace], commands: [...cmds] } : x));
             });
           },
+          onChecklist: (items) => setChecklist(items || []),
+          onProgress: (v) => setProgress(v),
+          onImagePending: () => setImagePending(true),
           onError: (msg) => {
             setActivity(null);
             setMessages((m) => [...m, { id: nextId(), role: "ai", text: "⚠️ " + msg }]);
           },
-        }
+        },
+        ac.signal
       );
-    } catch {
-      setMessages((m) => [...m, { id: nextId(), role: "ai", text: "⚠️ Could not reach the network." }]);
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        if (created) {
+          setMessages((m) =>
+            m.map((x) => (x.id === aiId ? { ...x, text: (x.text || "") + "\n\n_⏹ Stopped._" } : x))
+          );
+        } else {
+          setMessages((m) => [...m, { id: aiId, role: "ai", text: "_⏹ Stopped._" }]);
+        }
+      } else {
+        setMessages((m) => [...m, { id: nextId(), role: "ai", text: "⚠️ Could not reach the network." }]);
+      }
     } finally {
+      abortRef.current = null;
       setBusy(false);
       setActivity(null);
+      setImagePending(false);
     }
     return finalAnswer;
   }
 
   return {
-    messages, activity, liveTrace, liveCommands, busy, animatingId,
-    activeNodes, activeEdges, logs, conversationId, send, reset, load,
+    messages, activity, liveTrace, liveCommands, checklist, progress, imagePending, busy, animatingId,
+    activeNodes, activeEdges, logs, conversationId, send, stop, reset, load,
   };
 }

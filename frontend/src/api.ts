@@ -1,5 +1,15 @@
 import type { AgentMsg, Health, Source } from "./types";
 
+// Base URL for the Neura backend. Empty (default) → same-origin relative "/api/…"
+// (the web app + desktop shell). A host like the VS Code extension injects an
+// absolute base (window.__NEURA_API_BASE__ = "http://127.0.0.1:8010") so the
+// webview's fetches/SSE reach the backend across origins.
+export const API_BASE: string =
+  (typeof window !== "undefined" && (window as any).__NEURA_API_BASE__) || "";
+/** Prefix a same-origin API/asset path with the configured base. */
+export const apiUrl = (path: string): string =>
+  path.startsWith("http") ? path : API_BASE + path;
+
 export interface Conversation {
   id: string;
   title: string;
@@ -26,6 +36,7 @@ export interface ChatCallbacks {
   onCommand?(c: { command: string; exit: number; output: string }): void;
   onChecklist?(items: ChecklistItem[]): void;
   onProgress?(value: number): void;
+  onImagePending?(): void;
   onSummary?(text: string): void;
   onDone?(): void;
   onError?(msg: string): void;
@@ -49,7 +60,7 @@ export interface GraphData {
 }
 
 export async function getGraph(name: string): Promise<GraphData> {
-  return (await fetch(`/api/networks/${name}/graph`)).json();
+  return (await fetch(`${API_BASE}/api/networks/${name}/graph`)).json();
 }
 
 export interface ChatOptions {
@@ -67,7 +78,7 @@ export async function streamChat(
   cb: ChatCallbacks,
   signal?: AbortSignal
 ): Promise<void> {
-  const resp = await fetch("/api/chat", {
+  const resp = await fetch(API_BASE + "/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -77,6 +88,9 @@ export async function streamChat(
       network: opts.network ?? "neura",
       sly_data: opts.slyData ?? {},
       title: opts.title,
+      // A host (VS Code extension) injects the open folder so `dev` edits it directly.
+      workspace_path:
+        (typeof window !== "undefined" && (window as any).__NEURA_WORKSPACE__) || undefined,
     }),
     signal,
   });
@@ -125,6 +139,7 @@ export async function streamChat(
           break;
         case "checklist": cb.onChecklist?.(ev.items || []); break;
         case "progress": cb.onProgress?.(ev.value); break;
+        case "image_pending": cb.onImagePending?.(); break;
         case "summary": cb.onSummary?.(ev.text); break;
         case "done": cb.onDone?.(); break;
         case "error": cb.onError?.(ev.text); break;
@@ -134,11 +149,11 @@ export async function streamChat(
 }
 
 export async function fetchHealth(): Promise<Health> {
-  return (await fetch("/api/health")).json();
+  return (await fetch(API_BASE + "/api/health")).json();
 }
 
 export async function listConversations(network = "neura"): Promise<Conversation[]> {
-  const r = await fetch(`/api/conversations?network=${encodeURIComponent(network)}`);
+  const r = await fetch(`${API_BASE}/api/conversations?network=${encodeURIComponent(network)}`);
   return (await r.json()).conversations ?? [];
 }
 
@@ -151,20 +166,20 @@ export async function getConversation(id: string): Promise<{
   checklist?: ChecklistItem[];
   messages: { id: string; role: "user" | "ai"; text: string; sources: Source[]; build?: string; trace?: AgentMsg[]; commands?: { command: string; exit: number; output: string }[] }[];
 }> {
-  return (await fetch(`/api/conversations/${id}`)).json();
+  return (await fetch(`${API_BASE}/api/conversations/${id}`)).json();
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+  await fetch(`${API_BASE}/api/conversations/${id}`, { method: "DELETE" });
 }
 
 /** Clear a chat's multi-turn context (keeps messages) — fresh start for a drifted long chat. */
 export async function resetContext(id: string): Promise<void> {
-  await fetch(`/api/conversations/${id}/reset`, { method: "POST" });
+  await fetch(`${API_BASE}/api/conversations/${id}/reset`, { method: "POST" });
 }
 
 export async function createConversation(network = "neura"): Promise<{ id: string; title: string; network: string }> {
-  const r = await fetch("/api/conversations", {
+  const r = await fetch(API_BASE + "/api/conversations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ network }),
@@ -181,14 +196,14 @@ export interface NetworkInfo {
 }
 
 export async function listNetworks(): Promise<NetworkInfo[]> {
-  const r = await fetch("/api/networks");
+  const r = await fetch(API_BASE + "/api/networks");
   return (await r.json()).networks ?? [];
 }
 
 export async function spawnNetwork(
   description: string
 ): Promise<{ status: string; networks?: { name: string; title: string }[]; message?: string; error?: string }> {
-  const r = await fetch("/api/spawn", {
+  const r = await fetch(API_BASE + "/api/spawn", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ description }),
@@ -197,7 +212,7 @@ export async function spawnNetwork(
 }
 
 export async function deleteNetwork(name: string): Promise<void> {
-  await fetch(`/api/networks/${name}`, { method: "DELETE" });
+  await fetch(`${API_BASE}/api/networks/${name}`, { method: "DELETE" });
 }
 
 export interface NetworkConfig {
@@ -207,7 +222,7 @@ export interface NetworkConfig {
 }
 
 export async function getNetworkConfig(name: string): Promise<NetworkConfig> {
-  return (await fetch(`/api/networks/${name}/config`)).json();
+  return (await fetch(`${API_BASE}/api/networks/${name}/config`)).json();
 }
 
 export async function saveNetworkConfig(
@@ -215,7 +230,7 @@ export async function saveNetworkConfig(
   config: Record<string, string>
 ): Promise<{ ok: boolean; restarting?: boolean }> {
   return (
-    await fetch(`/api/networks/${name}/config`, {
+    await fetch(`${API_BASE}/api/networks/${name}/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ config }),
@@ -241,7 +256,7 @@ export interface FsListing {
 }
 
 export async function fsList(path = ""): Promise<FsListing> {
-  const r = await fetch(`/api/fs?path=${encodeURIComponent(path)}`);
+  const r = await fetch(`${API_BASE}/api/fs?path=${encodeURIComponent(path)}`);
   return r.json();
 }
 
@@ -267,7 +282,7 @@ export async function streamIngest(
   cb: IngestProgress,
   opts: { collection?: string; conversationId?: string } = {}
 ): Promise<void> {
-  const resp = await fetch("/api/ingest/stream", {
+  const resp = await fetch(API_BASE + "/api/ingest/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paths, collection: opts.collection, conversation_id: opts.conversationId }),
@@ -301,15 +316,15 @@ export async function streamIngest(
 
 // ---- Code editor (Monaco) over the chat's indexed workspace ----
 export async function getTree(cid: string): Promise<{ root: string; files: string[] }> {
-  return (await fetch(`/api/tree?cid=${encodeURIComponent(cid)}`)).json();
+  return (await fetch(`${API_BASE}/api/tree?cid=${encodeURIComponent(cid)}`)).json();
 }
 export async function getFile(cid: string, path: string, ref = ""): Promise<{ content: string; exists?: boolean }> {
   const q = `cid=${encodeURIComponent(cid)}&path=${encodeURIComponent(path)}${ref ? `&ref=${ref}` : ""}`;
-  return (await fetch(`/api/file?${q}`)).json();
+  return (await fetch(`${API_BASE}/api/file?${q}`)).json();
 }
 export async function saveFile(cid: string, path: string, content: string): Promise<{ ok: boolean }> {
   return (
-    await fetch("/api/file", {
+    await fetch(API_BASE + "/api/file", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversation_id: cid, path, content }),
@@ -325,11 +340,11 @@ export async function getGitStatus(
   staged?: Record<string, string>;
   unstaged?: Record<string, string>;
 }> {
-  return (await fetch(`/api/git/status?cid=${encodeURIComponent(cid)}`)).json();
+  return (await fetch(`${API_BASE}/api/git/status?cid=${encodeURIComponent(cid)}`)).json();
 }
 export async function gitStage(cid: string, path: string, unstage = false): Promise<{ ok?: boolean }> {
   return (
-    await fetch("/api/git/stage", {
+    await fetch(API_BASE + "/api/git/stage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversation_id: cid, path, unstage }),
@@ -338,7 +353,7 @@ export async function gitStage(cid: string, path: string, unstage = false): Prom
 }
 export async function gitCommit(cid: string, message: string): Promise<{ ok?: boolean; output?: string; error?: string }> {
   return (
-    await fetch("/api/git/commit", {
+    await fetch(API_BASE + "/api/git/commit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversation_id: cid, message }),
@@ -348,7 +363,7 @@ export async function gitCommit(cid: string, message: string): Promise<{ ok?: bo
 
 /** Clear the global "about me" knowledge base (drops all indexed chunks). */
 export async function clearKnowledge(): Promise<{ ok: boolean; chunks: number }> {
-  return (await fetch("/api/knowledge", { method: "DELETE" })).json();
+  return (await fetch(API_BASE + "/api/knowledge", { method: "DELETE" })).json();
 }
 
 export async function uploadFiles(
@@ -356,7 +371,7 @@ export async function uploadFiles(
 ): Promise<{ saved: string[]; skipped: number }> {
   const fd = new FormData();
   Array.from(files).forEach((f) => fd.append("files", f, (f as any).webkitRelativePath || f.name));
-  const r = await fetch("/api/upload", { method: "POST", body: fd });
+  const r = await fetch(API_BASE + "/api/upload", { method: "POST", body: fd });
   return r.json();
 }
 
@@ -370,7 +385,7 @@ export interface WatchStatus {
 }
 
 export async function startWatch(cid: string): Promise<WatchStatus> {
-  const r = await fetch("/api/watch", {
+  const r = await fetch(API_BASE + "/api/watch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ conversation_id: cid }),
@@ -379,11 +394,11 @@ export async function startWatch(cid: string): Promise<WatchStatus> {
 }
 
 export async function stopWatch(cid: string): Promise<void> {
-  await fetch(`/api/watch/${cid}`, { method: "DELETE" });
+  await fetch(`${API_BASE}/api/watch/${cid}`, { method: "DELETE" });
 }
 
 export async function getWatch(cid: string): Promise<WatchStatus> {
-  return (await fetch(`/api/watch/${cid}`)).json();
+  return (await fetch(`${API_BASE}/api/watch/${cid}`)).json();
 }
 
 export interface ProfileField {
@@ -392,14 +407,14 @@ export interface ProfileField {
 }
 
 export async function getProfile(): Promise<{ profile: Record<string, string>; fields: ProfileField[] }> {
-  return (await fetch("/api/profile")).json();
+  return (await fetch(API_BASE + "/api/profile")).json();
 }
 
 export async function saveProfile(
   profile: Record<string, string>
 ): Promise<{ ok: boolean; profile: Record<string, string> }> {
   return (
-    await fetch("/api/profile", {
+    await fetch(API_BASE + "/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile }),
@@ -420,7 +435,7 @@ export interface LlmSettings {
 }
 
 export async function getLlm(): Promise<LlmSettings> {
-  return (await fetch("/api/llm")).json();
+  return (await fetch(API_BASE + "/api/llm")).json();
 }
 export async function saveLlm(
   provider: string,
@@ -428,10 +443,27 @@ export async function saveLlm(
   apiKey?: string
 ): Promise<{ ok?: boolean; restarting?: boolean; error?: string }> {
   return (
-    await fetch("/api/llm", {
+    await fetch(API_BASE + "/api/llm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider, model, api_key: apiKey || "" }),
+    })
+  ).json();
+}
+
+// Set (or clear, with empty provider+model) one agent's LLM inside a network.
+export async function setAgentLlm(
+  network: string,
+  agent: string,
+  provider: string,
+  model: string,
+  temperature?: number | null
+): Promise<{ ok?: boolean; restarting?: boolean; error?: string }> {
+  return (
+    await fetch(`${API_BASE}/api/networks/${encodeURIComponent(network)}/agent-llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent, provider, model, temperature: temperature ?? null }),
     })
   ).json();
 }
@@ -460,17 +492,17 @@ export interface RadarDoc {
   items: RadarItem[];
 }
 export async function getRadar(refresh = false): Promise<RadarDoc> {
-  return (await fetch(`/api/radar${refresh ? "?refresh=true" : ""}`)).json();
+  return (await fetch(`${API_BASE}/api/radar${refresh ? "?refresh=true" : ""}`)).json();
 }
 export async function refreshRadar(): Promise<RadarDoc> {
-  return (await fetch("/api/radar/refresh", { method: "POST" })).json();
+  return (await fetch(API_BASE + "/api/radar/refresh", { method: "POST" })).json();
 }
 export async function getRadarPaper(id: string): Promise<{ item: RadarItem | null; error?: string }> {
-  return (await fetch(`/api/radar/paper?id=${encodeURIComponent(id)}`)).json();
+  return (await fetch(`${API_BASE}/api/radar/paper?id=${encodeURIComponent(id)}`)).json();
 }
 export async function setRadarAreas(areas: RadarArea[]): Promise<RadarDoc> {
   return (
-    await fetch("/api/radar/areas", {
+    await fetch(API_BASE + "/api/radar/areas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ areas }),
@@ -479,7 +511,7 @@ export async function setRadarAreas(areas: RadarArea[]): Promise<RadarDoc> {
 }
 export async function setRadarItemStatus(id: string, status: string): Promise<{ ok: boolean }> {
   return (
-    await fetch(`/api/radar/item/${id}`, {
+    await fetch(`${API_BASE}/api/radar/item/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -502,7 +534,7 @@ export interface WorkflowMemoryDoc {
   entries: WorkflowMemoryEntry[];
 }
 export async function getWorkflowMemory(cid: string): Promise<WorkflowMemoryDoc> {
-  return (await fetch(`/api/workflow-memory/${cid}`)).json();
+  return (await fetch(`${API_BASE}/api/workflow-memory/${cid}`)).json();
 }
 export async function addWorkflowMemory(
   cid: string,
@@ -510,7 +542,7 @@ export async function addWorkflowMemory(
   key = "note"
 ): Promise<{ ok: boolean; entry: WorkflowMemoryEntry | null }> {
   return (
-    await fetch(`/api/workflow-memory/${cid}`, {
+    await fetch(`${API_BASE}/api/workflow-memory/${cid}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value, key }),
@@ -518,10 +550,10 @@ export async function addWorkflowMemory(
   ).json();
 }
 export async function deleteWorkflowMemoryEntry(cid: string, id: string): Promise<{ ok: boolean }> {
-  return (await fetch(`/api/workflow-memory/${cid}/${id}`, { method: "DELETE" })).json();
+  return (await fetch(`${API_BASE}/api/workflow-memory/${cid}/${id}`, { method: "DELETE" })).json();
 }
 export async function clearWorkflowMemory(cid: string): Promise<{ ok: boolean }> {
-  return (await fetch(`/api/workflow-memory/${cid}`, { method: "DELETE" })).json();
+  return (await fetch(`${API_BASE}/api/workflow-memory/${cid}`, { method: "DELETE" })).json();
 }
 
 export interface MemoryItem {
@@ -535,11 +567,11 @@ export interface MemorySuggested {
 }
 
 export async function getMemory(): Promise<{ items: MemoryItem[]; suggested: MemorySuggested[] }> {
-  return (await fetch("/api/memory")).json();
+  return (await fetch(API_BASE + "/api/memory")).json();
 }
 export async function setMemory(topic: string, content: string): Promise<{ ok: boolean; topic: string }> {
   return (
-    await fetch("/api/memory", {
+    await fetch(API_BASE + "/api/memory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topic, content }),
@@ -547,13 +579,13 @@ export async function setMemory(topic: string, content: string): Promise<{ ok: b
   ).json();
 }
 export async function deleteMemory(topic: string): Promise<void> {
-  await fetch(`/api/memory/${encodeURIComponent(topic)}`, { method: "DELETE" });
+  await fetch(`${API_BASE}/api/memory/${encodeURIComponent(topic)}`, { method: "DELETE" });
 }
 
 /** Rewrite an answer into a short, natural spoken version (for TTS). */
 export async function speechify(text: string): Promise<string> {
   try {
-    const r = await fetch("/api/speechify", {
+    const r = await fetch(API_BASE + "/api/speechify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -566,7 +598,7 @@ export async function speechify(text: string): Promise<string> {
 }
 
 export async function synthesize(text: string, voice = "af_heart"): Promise<Blob> {
-  const r = await fetch("/api/tts", {
+  const r = await fetch(API_BASE + "/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: text.slice(0, 1500), voice, speed: 1.0 }),

@@ -23,6 +23,8 @@ export interface NodeDetails {
   description?: string;
   model?: string;
   modelInherited?: boolean;
+  provider?: string;
+  temperature?: number;
   fallbacks?: string[];
   calls?: string[];
   params?: NodeParam[];
@@ -322,6 +324,8 @@ export interface DetailNode {
   tools?: string[];
   model?: string;
   modelInherited?: boolean;
+  provider?: string;
+  temperature?: number;
   fallbacks?: string[];
   params?: NodeParam[];
   class?: string | null;
@@ -339,6 +343,8 @@ export function detailToFlow(nodes: DetailNode[], mode: LayoutMode = "tree") {
       description: n.description ?? undefined,
       model: n.model,
       modelInherited: n.modelInherited,
+      provider: n.provider,
+      temperature: n.temperature,
       fallbacks: n.fallbacks,
       calls: n.tools ?? [],
       params: n.params,

@@ -1,0 +1,139 @@
+/* Extension-only lean layout: a single narrow column that fills the webview,
+   with the graph + checklist as bounded, toggleable sections above the thread. */
+html, body, #root { height: 100%; margin: 0; }
+
+.ext-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg, #0b0e15);
+  color: var(--fg, #e6e9f0);
+  overflow: hidden;
+}
+
+.ext-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, #2a3350);
+  flex: 0 0 auto;
+}
+.ext-title { display: flex; align-items: center; gap: 7px; font-weight: 640; font-size: 13.5px; }
+.ext-orb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #a5a5ff, #4f46e5);
+}
+.ext-actions { display: flex; gap: 6px; }
+.ext-toggle {
+  border: 1px solid var(--line, #2a3350);
+  background: var(--panel, #141a26);
+  color: var(--fg-soft, #b8bfd0);
+  border-radius: 8px;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 5px 9px; cursor: pointer;
+}
+.ext-toggle:hover { background: var(--hover, #1c2333); }
+.ext-toggle.on { border-color: #7c7cf6; background: rgba(124,124,246,.15); color: #a5a5ff; }
+
+/* Bounded, scrollable toggle sections */
+.ext-panel {
+  flex: 0 0 auto;
+  max-height: 42vh;
+  overflow: auto;
+  border-bottom: 1px solid var(--line, #2a3350);
+}
+.ext-graph { height: 42vh; }
+.ext-graph .netdock { height: 100%; width: 100% !important; border: none; border-radius: 0; }
+.ext-graph .netgraph { height: calc(42vh - 44px); }
+.ext-checklist { padding: 8px 10px; }
+.ext-empty { color: var(--fg-muted, #7b8194); font-size: 12.5px; padding: 14px 6px; }
+
+/* Thread fills remaining space and scrolls */
+.ext-thread { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.ext-thread .thread { padding: 10px; }
+
+/* Minimal composer pinned to the bottom */
+.ext-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line, #2a3350);
+}
+.ext-composer textarea {
+  flex: 1 1 auto;
+  resize: none;
+  background: var(--panel, #141a26);
+  border: 1px solid var(--line, #2a3350);
+  border-radius: 10px;
+  color: var(--fg, #e6e9f0);
+  font: inherit; font-size: 13.5px;
+  padding: 9px 11px;
+  outline: none;
+  max-height: 140px;
+}
+.ext-composer textarea:focus { border-color: #7c7cf6; }
+.ext-send {
+  flex: 0 0 auto;
+  width: 36px; height: 36px;
+  border: none; border-radius: 10px;
+  background: linear-gradient(135deg, #7c7cf6, #4f46e5);
+  color: #fff; font-size: 16px; cursor: pointer;
+}
+.ext-send.stop { background: #e5484d; }
+
+/* Header left group + hamburger */
+.ext-head-left { display: flex; align-items: center; gap: 8px; }
+.ext-icon {
+  border: none; background: transparent; color: var(--fg-soft, #b8bfd0);
+  font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 8px; line-height: 1;
+}
+.ext-icon:hover { background: var(--hover, #1c2333); color: var(--fg, #e6e9f0); }
+
+/* Chat-history drawer (slides from the left over the panel) */
+.ext-drawer-scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(0,0,0,.45);
+  display: flex;
+}
+.ext-drawer {
+  width: 78%; max-width: 300px; height: 100%;
+  background: var(--panel, #141a26);
+  border-right: 1px solid var(--line, #2a3350);
+  display: flex; flex-direction: column;
+  box-shadow: 2px 0 24px rgba(0,0,0,.4);
+}
+.ext-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-bottom: 1px solid var(--line, #2a3350);
+  font-weight: 640; font-size: 13px;
+}
+.ext-newchat {
+  margin: 10px 12px; padding: 8px 10px;
+  border: 1px solid var(--line, #2a3350); border-radius: 9px;
+  background: var(--bg, #0b0e15); color: var(--fg, #e6e9f0);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left;
+}
+.ext-newchat:hover { border-color: #7c7cf6; }
+.ext-convos { flex: 1 1 auto; overflow: auto; padding: 0 8px 10px; }
+.ext-conv {
+  display: flex; align-items: center; gap: 4px;
+  border-radius: 9px; margin: 2px 0;
+}
+.ext-conv:hover { background: var(--hover, #1c2333); }
+.ext-conv.on { background: rgba(124,124,246,.14); }
+.ext-conv-main {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  background: transparent; border: none; color: var(--fg, #e6e9f0);
+  text-align: left; cursor: pointer; padding: 8px 8px;
+}
+.ext-conv-title { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ext-conv-meta { font-size: 10.5px; color: var(--fg-muted, #7b8194); }
+.ext-conv-del {
+  flex: 0 0 auto; border: none; background: transparent; cursor: pointer;
+  color: var(--fg-muted, #7b8194); font-size: 12px; padding: 6px 8px; border-radius: 8px;
+}
+.ext-conv-del:hover { color: #e5484d; background: rgba(229,72,77,.12); }

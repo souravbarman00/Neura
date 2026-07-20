@@ -19,6 +19,9 @@ interface Props {
   onAddWorkspace(): void;
   onMic(): void;
   onVoiceAction(): void;
+  // While a turn is streaming, the send button becomes a Stop button (aborts the run).
+  busy?: boolean;
+  onStop?(): void;
 }
 
 const WAVE_COLOR: Record<OrbState, { c: string; g: string }> = {
@@ -43,6 +46,8 @@ export default function Composer({
   onAddWorkspace,
   onMic,
   onVoiceAction,
+  busy,
+  onStop,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -121,9 +126,15 @@ export default function Composer({
           <button className={"ctool mic" + (voice.active ? " on" : "")} title="Talk to Neura" onClick={onMic}>
             <Mic />
           </button>
-          <button className="send" disabled={disabled} onClick={submit}>
-            <Send />
-          </button>
+          {busy && onStop ? (
+            <button className="send stop" onClick={onStop} title="Stop the agents">
+              <Stop />
+            </button>
+          ) : (
+            <button className="send" disabled={disabled} onClick={submit}>
+              <Send />
+            </button>
+          )}
         </div>
       </div>
     </div>

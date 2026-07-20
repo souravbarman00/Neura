@@ -871,3 +871,105 @@ button { font-family: inherit; }
 .vault .v .val { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--fg-muted); }
 .mnote { font-size: 11px; color: var(--fg-muted); margin-top: 10px; line-height: 1.5; }
 @media (max-width: 1180px) { .rclose { display: grid; margin-left: auto; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); place-items: center; cursor: pointer; } .rclose svg { width: 15px; height: 15px; stroke: var(--fg-soft); } .rhead .badge { margin-left: 0; } }
+
+/* Browser-tool media (screenshots / recordings) rendered inline in chat */
+.md-media {
+  display: block;
+  max-width: 100%;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line, #2a3350);
+  margin: 10px 0;
+  background: #0b0e15;
+}
+.md-shot { display: block; cursor: zoom-in; }
+.md-shot:hover .md-media { border-color: var(--accent, #7c7cf6); }
+
+/* ---- Per-agent LLM edit: full-screen network + edit modal ---- */
+/* Clickable nodes in the graph (edit an agent's model). */
+.netdock .react-flow__node { cursor: pointer; }
+
+/* Full-screen network overlay (main Neura view) for editing agent models. */
+.netdock.netdock-full {
+  position: fixed;
+  inset: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 55; /* below the edit modal (.modal-scrim is 60) */
+  border-radius: 0;
+  border: none;
+}
+.netdock.netdock-full .netgraph { height: calc(100vh - 48px); }
+
+.iconbtn.netfull { margin-right: 2px; }
+
+/* Agent model modal */
+.agent-llm-modal { width: 460px; max-width: 92vw; }
+.agent-llm-modal .all-agent { font-family: var(--mono, ui-monospace, monospace); color: var(--accent, #7c7cf6); }
+.all-form { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.all-field { display: flex; flex-direction: column; gap: 5px; }
+.all-label { font-size: 12px; color: var(--fg-muted, #8b91a7); font-weight: 600; }
+.agent-llm-modal .modal-input.mono { font-family: var(--mono, ui-monospace, monospace); }
+.all-warn {
+  font-size: 12px;
+  color: #f0b232;
+  background: rgba(240, 178, 50, 0.1);
+  border: 1px solid rgba(240, 178, 50, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* Stop button (replaces Send while a turn is streaming) */
+.composer .send.stop {
+  background: #e5484d;
+  color: #fff;
+}
+.composer .send.stop:hover { background: #d13b40; }
+.radar-chat-input .radar-stop { background: #e5484d; border-color: #e5484d; }
+.radar-chat-input .radar-stop:hover { background: #d13b40; }
+
+/* ChatGPT-style image-generation placeholder (shimmer) */
+.img-gen { margin: 10px 0 4px; max-width: 340px; }
+.img-gen-skel {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 320px;
+  border-radius: 14px;
+  border: 1px solid var(--line, #2a3350);
+  background: linear-gradient(
+    100deg,
+    rgba(124,124,246,0.06) 30%,
+    rgba(124,124,246,0.20) 50%,
+    rgba(124,124,246,0.06) 70%
+  );
+  background-size: 200% 100%;
+  animation: imgShimmer 1.25s ease-in-out infinite;
+}
+.img-gen-cap {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--fg-muted, #7b8194);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+@keyframes imgShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Downloadable generated files (PDF/PPTX/…) rendered as a card in chat */
+.md-download {
+  display: inline-flex; align-items: center; gap: 9px;
+  margin: 8px 0; padding: 10px 14px;
+  border: 1px solid var(--line, #2a3350); border-radius: 12px;
+  background: var(--panel, #141a26); color: var(--fg, #e6e9f0);
+  text-decoration: none; font-size: 13.5px; font-weight: 600;
+  transition: border-color .12s, background .12s;
+}
+.md-download:hover { border-color: var(--accent, #7c7cf6); background: var(--hover, #1c2333); }
+.md-dl-icon {
+  display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 8px;
+  background: linear-gradient(135deg, #7c7cf6, #4f46e5); color: #fff; font-size: 14px;
+}

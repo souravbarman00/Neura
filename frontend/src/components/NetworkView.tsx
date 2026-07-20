@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Edge } from "@xyflow/react";
 import { getGraph } from "../api";
 import { NetworkGraph } from "../studio/graph/NetworkGraph";
-import { detailToFlow, type AgentFlowNode, type DetailNode, type LayoutMode } from "../studio/graph/layout";
+import { detailToFlow, type AgentFlowNode, type DetailNode, type LayoutMode, type NodeDetails } from "../studio/graph/layout";
 import { ChevronDown, Maximize, Minimize } from "../icons";
 import CodeView from "./CodeView";
 
@@ -23,6 +23,10 @@ interface Props {
   // this flag) instead of the graph collapse chevron — used by the Radar to make this
   // panel fill the whole left side.
   expanded?: boolean;
+  // Click an LLM agent node → edit its model/provider. Only wired in the main Neura view.
+  onEditAgent?(agent: string, details: NodeDetails): void;
+  // Bump to force a graph refetch (e.g. after an agent's model changed + runtime reload).
+  refreshKey?: number;
 }
 
 interface Win {
@@ -57,8 +61,11 @@ export default function NetworkView({
   onToggle,
   paperUrl,
   expanded,
+  onEditAgent,
+  refreshKey,
 }: Props) {
   const [tab, setTab] = useState<"agents" | "logs" | "code" | "paper">(paperUrl ? "paper" : "agents");
+  const [full, setFull] = useState(false);
   useEffect(() => {
     if (!focus && tab === "code") setTab("agents"); // Code tab only exists in focus mode
     if (!paperUrl && tab === "paper") setTab("agents");
@@ -116,7 +123,7 @@ export default function NetworkView({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [network]);
+  }, [network, refreshKey]);
 
   const { nodes, edges } = useMemo(() => {
     if (!detail.length) return { nodes: [] as AgentFlowNode[], edges: [] as Edge[] };
@@ -181,8 +188,8 @@ export default function NetworkView({
 
   return (
     <div
-      className={"netdock" + (open ? "" : " collapsed") + (floating ? " floating" : "")}
-      style={style}
+      className={"netdock" + (open ? "" : " collapsed") + (floating ? " floating" : "") + (full ? " netdock-full" : "")}
+      style={full ? {} : style}
     >
       <div
         className="netdock-head"
@@ -210,6 +217,15 @@ export default function NetworkView({
             <button className={layout === "tree" ? "on" : ""} onClick={() => chooseLayout("tree")}>Tree</button>
             <button className={layout === "free" ? "on" : ""} onClick={() => chooseLayout("free")}>Free flow</button>
           </div>
+        )}
+        {expanded === undefined && (
+          <button
+            className="iconbtn sm netfull"
+            onClick={() => setFull((v) => !v)}
+            title={full ? "Exit full screen" : "Full screen — edit agent models"}
+          >
+            {full ? <Minimize /> : <Maximize />}
+          </button>
         )}
         {expanded === undefined ? (
           <button
@@ -245,7 +261,28 @@ export default function NetworkView({
             {nodes.length === 0 ? (
               <div className="muted-empty" style={{ padding: 24 }}>No graph available.</div>
             ) : (
-              <NetworkGraph nodes={nodes} edges={edges} activeIds={activeNodes} activeEdgeIds={activeEdges} />
+              <NetworkGraph
+                nodes={nodes}
+                edges={edges}
+                activeIds={activeNodes}
+                activeEdgeIds={activeEdges}
+                onNodePick={
+                  onEditAgent
+                    ? (id) => {
+                        const d = detail.find((n) => n.name === id);
+                        // Only LLM agents have a model to change (not coded/toolbox tools).
+                        if (!d || !(d.display_as === "front_man" || d.display_as === "llm_agent")) return;
+                        onEditAgent(id, {
+                          description: d.description ?? undefined,
+                          model: d.model,
+                          modelInherited: d.modelInherited,
+                          provider: d.provider,
+                          temperature: d.temperature,
+                        });
+                      }
+                    : undefined
+                }
+              />
             )}
           </div>
         ) : (

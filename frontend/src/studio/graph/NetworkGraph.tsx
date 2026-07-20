@@ -9,7 +9,9 @@ import {
   useReactFlow,
   useNodesState,
   useEdgesState,
+  useStore,
   type Edge,
+  type ReactFlowState,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Crosshair, Lightbulb, Maximize2 } from "lucide-react";
@@ -21,12 +23,13 @@ import type { AgentFlowNode } from "./layout";
 const nodeTypes = { agent: FlowNode };
 const edgeTypes = { glow: GlowEdge };
 
-function usePersistedToggle(key: string): [boolean, () => void] {
+function usePersistedToggle(key: string, defaultOn = false): [boolean, () => void] {
   const [on, setOn] = useState(() => {
     try {
-      return localStorage.getItem(key) === "1";
+      const v = localStorage.getItem(key);
+      return v === null ? defaultOn : v === "1";
     } catch {
-      return false;
+      return defaultOn;
     }
   });
   const toggle = () =>
@@ -48,12 +51,14 @@ function Flow({
   activeIds,
   activeEdgeIds,
   reverseEdgeIds,
+  onNodePick,
 }: {
   inNodes: AgentFlowNode[];
   inEdges: Edge[];
   activeIds?: Set<string>;
   activeEdgeIds?: Set<string>;
   reverseEdgeIds?: Set<string>;
+  onNodePick?: (id: string) => void;
 }) {
   const { fitView } = useReactFlow();
   const { mode } = useAliveTheme();
@@ -61,7 +66,7 @@ function Flow({
   const [edges, setEdges, onEdgesChange] = useEdgesState(inEdges);
 
   const traceable = activeEdgeIds !== undefined;
-  const [follow, toggleFollow] = usePersistedToggle("alive-graph-follow");
+  const [follow, toggleFollow] = usePersistedToggle("alive-graph-follow", true);
   const [spotlight, toggleSpotlight] = usePersistedToggle("alive-graph-spotlight");
   const [magnify, toggleMagnify] = usePersistedToggle("alive-graph-magnify");
 
@@ -206,6 +211,17 @@ function Flow({
     }
   }, [inNodes, fitView]);
 
+  // Refit whenever the pane itself resizes (e.g. the extension panel opening or the
+  // window changing width) so the whole network stays framed in small containers.
+  const paneW = useStore((s: ReactFlowState) => Math.round(s.width || 0));
+  const paneH2 = useStore((s: ReactFlowState) => Math.round(s.height || 0));
+  useEffect(() => {
+    if (paneW > 0 && paneH2 > 0 && inNodes.length) {
+      const id = setTimeout(() => fitView({ padding: 0.15, minZoom: 0.05, duration: 250 }), 60);
+      return () => clearTimeout(id);
+    }
+  }, [paneW, paneH2, inNodes.length, fitView]);
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -216,6 +232,7 @@ function Flow({
       edgeTypes={edgeTypes}
       colorMode={mode}
       className={magnify ? "alive-magnify-active" : undefined}
+      onNodeClick={onNodePick ? (_, n) => onNodePick(n.id) : undefined}
       fitView
       fitViewOptions={{ padding: 0.15, minZoom: 0.05 }}
       minZoom={0.05}
@@ -269,12 +286,14 @@ export function NetworkGraph({
   activeIds,
   activeEdgeIds,
   reverseEdgeIds,
+  onNodePick,
 }: {
   nodes: AgentFlowNode[];
   edges: Edge[];
   activeIds?: Set<string>;
   activeEdgeIds?: Set<string>;
   reverseEdgeIds?: Set<string>;
+  onNodePick?: (id: string) => void;
 }) {
   return (
     <div className="h-full w-full">
@@ -285,6 +304,7 @@ export function NetworkGraph({
           activeIds={activeIds}
           activeEdgeIds={activeEdgeIds}
           reverseEdgeIds={reverseEdgeIds}
+          onNodePick={onNodePick}
         />
       </ReactFlowProvider>
     </div>

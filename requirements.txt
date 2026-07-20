@@ -10,3 +10,7 @@ python-dotenv>=1.0
 pyhocon>=0.3.60         # parse the agent-network + llm_config HOCON files
 aiofiles>=23.0          # async file I/O for persistent memory (markdown store)
 watchdog>=4.0           # auto-re-index watcher for local repos/folders
+playwright>=1.44
+python-pptx>=1.0
+fpdf2>=2.8
+# image gen uses OpenAI images API via httpx (no openai SDK needed)

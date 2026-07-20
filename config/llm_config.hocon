@@ -5,17 +5,17 @@
     #   Anthropic / OpenAI: native neuro-san classes (use "model_name").
     #   Mistral: wired via ChatMistralAI (uses "model").
 
-    # --- Active: Claude (Anthropic) ---
+    # --- Active: OpenAI (GPT) ---
     "llm_config": {
-        "class": "anthropic",
-        "model_name": "claude-opus-4-5",
+        "class": "openai",
+        "model_name": "gpt-5.2",
         "temperature": 0.2
     }
 
-    # --- Preset: OpenAI (GPT) ---
+    # --- Preset: Claude (Anthropic) ---
     # "llm_config": {
-    #     "class": "openai",
-    #     "model_name": "gpt-5.4",
+    #     "class": "anthropic",
+    #     "model_name": "claude-sonnet-4-5",
     #     "temperature": 0.2
     # }
 

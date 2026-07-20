@@ -61,6 +61,8 @@ class CodebaseTool(CodedTool):
                 return self._read(resolve(rel), root, args)
             if action == "search":
                 return self._search(root, args)
+            if action == "find":
+                return self._find(root, args)
             if action == "write":
                 return self._write(resolve(rel), root, args)
             if action == "edit":
@@ -71,7 +73,7 @@ class CodebaseTool(CodedTool):
             return f"Refused: {e}"
         except Exception as e:  # noqa: BLE001
             return f"Error during '{action}': {e}"
-        return ("Unknown action. Use one of: list, read, search, write, edit, run.")
+        return ("Unknown action. Use one of: list, find, read, search, write, edit, run.")
 
     # ---- reads -------------------------------------------------------------
     def _list(self, target: Path, root: Path) -> str:
@@ -110,6 +112,30 @@ class CodebaseTool(CodedTool):
             body = "\n".join(f"{i + 1}\t{ln}" for i, ln in enumerate(lines))
             head = f"{target.relative_to(root)} ({len(lines)} lines):\n"
         return _cap(head + body)
+
+    def _find(self, root: Path, args: Dict[str, Any]) -> str:
+        """Locate files by name/glob — returns PATHS ONLY (cheap; no file contents).
+        Use this to resolve 'the X file' to a path before reading, instead of grepping."""
+        import fnmatch
+
+        pattern = (args.get("query") or args.get("path") or "").strip()
+        if not pattern:
+            return "Provide 'query' = a filename or glob, e.g. 'UserService.ts' or '*.hocon'."
+        low = pattern.lower()
+        hits: List[str] = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+            for fn in filenames:
+                if fnmatch.fnmatch(fn, pattern) or low in fn.lower():
+                    hits.append(str(Path(dirpath, fn).relative_to(root)))
+                    if len(hits) >= 200:
+                        break
+            if len(hits) >= 200:
+                break
+        if not hits:
+            return f"No files matching '{pattern}'."
+        hits.sort(key=lambda h: (h.count("/"), len(h)))  # shallowest / shortest first
+        return f"{len(hits)} file(s) matching '{pattern}':\n" + "\n".join(hits[:100])
 
     def _search(self, root: Path, args: Dict[str, Any]) -> str:
         query = (args.get("query") or "").strip()

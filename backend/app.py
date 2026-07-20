@@ -34,6 +34,19 @@ TTS_URL = os.environ.get("TTS_URL", "http://localhost:8900")
 STT_URL = os.environ.get("STT_URL", "http://localhost:8901")
 
 app = FastAPI(title="Neura")
+
+# Allow cross-origin hosts (e.g. the VS Code extension webview, which runs on a
+# vscode-webview:// origin) to reach this local backend. No cookies/credentials are
+# used, so a permissive policy is safe for a localhost service.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 store.init_db()
 
 # Friendly titles for built-in networks; spawned ones come from the DB.
@@ -483,7 +496,7 @@ async def health() -> dict:
 # ---------------------------------------------------------------- profile
 @app.get("/api/profile")
 async def get_profile():
-    return {"profile": store.get_profile(), "fields": [{"key": k, "label": l} for k, l in PROFILE_FIELDS]}
+    return {"profile": store.get_profile(), "fields": [{"key": key, "label": label} for key, label in PROFILE_FIELDS]}
 
 
 @app.post("/api/profile")
@@ -1137,6 +1150,8 @@ def _network_details_map(name: str) -> dict:
         except Exception:  # noqa: BLE001
             model = None
 
+    net_provider = _read_active_llm().get("provider")
+
     out: dict = {}
     try:
         tools = conf.get("tools", []) or []
@@ -1158,13 +1173,35 @@ def _network_details_map(name: str) -> dict:
             cls = t.get("class", None)
             toolbox = t.get("toolbox", None)
             is_agent = bool(t.get("instructions", None)) or (not cls and not toolbox)
+            # Per-agent llm_config override (the agent's own block wins over the network default).
+            own_model = own_provider = own_temp = None
+            try:
+                tool_lc = t.get("llm_config", None)
+            except Exception:  # noqa: BLE001
+                tool_lc = None
+            if tool_lc:
+                try:
+                    own_model = tool_lc.get("model_name", None) or tool_lc.get("model", None)
+                    own_cls = tool_lc.get("class", None)
+                    own_provider = _CLASS_TO_PROVIDER.get(own_cls, own_cls)
+                    own_temp = tool_lc.get("temperature", None)
+                except Exception:  # noqa: BLE001
+                    pass
+            if is_agent and own_model:
+                node_model, inherited, provider, temp = own_model, False, own_provider, own_temp
+            elif is_agent:
+                node_model, inherited, provider, temp = model, True, net_provider, None
+            else:
+                node_model = inherited = provider = temp = None
             out[nm] = {
                 "description": desc or None,
                 "params": params or None,
                 "class": cls,
                 "toolbox": toolbox,
-                "model": model if is_agent else None,
-                "modelInherited": True if (is_agent and model) else None,
+                "model": node_model,
+                "modelInherited": inherited,
+                "provider": provider,
+                "temperature": temp,
             }
         except Exception:  # noqa: BLE001
             continue
@@ -1245,6 +1282,77 @@ async def set_network_config(request: Request, name: str) -> dict:
     store.set_network_config(name, merged)
     _restart_runtime()
     return {"ok": True, "restarting": True}
+
+
+def _set_agent_llm(name: str, agent: str, provider: str, model: str,
+                   temperature: float | None) -> None:
+    """Surgically set (or clear) ONE agent's llm_config inside a network's HOCON.
+
+    The neura registries are hand-authored (comments + big triple-quoted instruction
+    blocks), so we can't round-trip them through pyhocon. Instead we edit text: find the
+    agent's `"name": "<agent>"` line and insert/replace a single-line `"llm_config": …`
+    right after it (empty provider/model removes the override → the agent inherits the
+    network default). Then reload the runtime so it takes effect.
+    """
+    stem = name.split("/")[-1]
+    hocon = spawn.GENERATED_DIR / f"{stem}.hocon"
+    if not hocon.exists():
+        hocon = spawn.ROOT / "registries" / f"{stem}.hocon"
+    if not hocon.exists():
+        raise FileNotFoundError(f"network '{name}' not found")
+
+    text = hocon.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    name_re = re.compile(r'^(\s*)"name"\s*:\s*"' + re.escape(agent) + r'"\s*,?\s*$')
+    next_name_re = re.compile(r'^\s*"name"\s*:\s*"')
+    llm_re = re.compile(r'^\s*"llm_config"\s*:')
+
+    idx = next((i for i, ln in enumerate(lines) if name_re.match(ln)), None)
+    if idx is None:
+        raise ValueError(f"agent '{agent}' not found in {stem}.hocon")
+    indent = name_re.match(lines[idx]).group(1)
+    end = next((j for j in range(idx + 1, len(lines)) if next_name_re.match(lines[j])), len(lines))
+
+    block = [ln for ln in lines[idx + 1:end] if not llm_re.match(ln)]  # drop any existing override
+    if provider and model:
+        p = LLM_PROVIDERS.get(provider)
+        cls = p["class"] if p else provider           # unknown provider → treat as a raw class
+        field = p["model_field"] if p else "model_name"
+        parts = f'"class": "{cls}", "{field}": "{model}"'
+        if temperature is not None:
+            parts += f', "temperature": {temperature}'
+        block = [f'{indent}"llm_config": {{ {parts} }},\n'] + block
+
+    hocon.write_text("".join(lines[:idx + 1] + block + lines[end:]), encoding="utf-8")
+    _restart_runtime()
+
+
+@app.post("/api/networks/{name:path}/agent-llm")
+async def set_agent_llm(request: Request, name: str) -> dict:
+    """Set or clear a single agent's LLM model/provider in the network's HOCON."""
+    payload = await request.json()
+    agent = (payload.get("agent") or "").strip()
+    provider = (payload.get("provider") or "").strip()
+    model = (payload.get("model") or "").strip()
+    temp_raw = payload.get("temperature", None)
+    try:
+        temperature = float(temp_raw) if temp_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        temperature = None
+    if not agent:
+        return JSONResponse({"error": "agent is required"}, status_code=400)
+    # Setting an override needs both provider and model; clearing needs neither.
+    if (provider and not model) or (model and not provider):
+        return JSONResponse({"error": "provide both provider and model, or neither to inherit"},
+                            status_code=400)
+    try:
+        _set_agent_llm(name, agent, provider, model, temperature)
+    except (FileNotFoundError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    return {"ok": True, "restarting": True, "agent": agent,
+            "provider": provider or None, "model": model or None}
 
 
 @app.delete("/api/networks/{name:path}")
@@ -1443,6 +1551,13 @@ async def chat(request: Request) -> StreamingResponse:
     if store.message_count(conv_id) == 1:
         store.rename_conversation(conv_id, title or _title_from(message))
 
+    # A host (e.g. the VS Code extension) can point this chat at the folder the user
+    # has open by sending `workspace_path` — it becomes the chat's workspace so `dev`/
+    # codebase_op read/edit those files directly (no manual "Add to knowledge base").
+    ws_override = (payload.get("workspace_path") or "").strip()
+    if ws_override:
+        store.set_workspace(conv_id, ws_override)
+
     # Knowledge scoping: this chat's own index (local) + the global "about me" index.
     # knowledge_search reads these from sly_data and searches local-first.
     sly_data = {
@@ -1531,6 +1646,9 @@ async def chat(request: Request) -> StreamingResponse:
         trace_log: list = []  # agent-to-agent talk for this answer (the "thinking")
         cmd_log: list = []    # shell commands the codebase agent ran (terminal cards)
         front = None          # front-man name (root of the origin path)
+        seen_results: set = set()  # dedupe tool results that bubble UP the origin chain
+        #   (the same result is re-emitted at each ancestor — sub-agent AND front-man —
+        #   so we'd otherwise show it twice: "dev {…}" then an identical "neura {…}").
         try:
             async for frame in nsclient.stream_frames(network, send_message, ctx, sly_data or None):
                 r = frame.get("response", {}) or {}
@@ -1545,6 +1663,11 @@ async def chat(request: Request) -> StreamingResponse:
                     if front is None:
                         front = path[0]
                     yield _sse({"type": "trace", "node": path[-1], "path": path})
+                    # Image generation is slow — tell the UI to show a shimmer placeholder
+                    # (ChatGPT-style) while `image_gen` is the active node.
+                    if path[-1] == "image_gen":
+                        yield _sse({"type": "image_pending"})
+                        yield _sse({"type": "activity", "text": "Generating image…"})
                 agent = path[-1] if path else (front or network)
 
                 # Task-plan (checklist middleware) + progress, carried on the frame's structure.
@@ -1568,12 +1691,20 @@ async def chat(request: Request) -> StreamingResponse:
                     if text.strip():
                         cmd = _parse_command(text)
                         if cmd:
-                            cmd_log.append(cmd)
-                            yield _sse({"type": "command", **cmd})
+                            key = ("cmd", cmd.get("command", ""), cmd.get("output", ""))
+                            if key not in seen_results:
+                                seen_results.add(key)
+                                cmd_log.append(cmd)
+                                yield _sse({"type": "command", **cmd})
                         else:
-                            msg = {"agent": agent, "path": path, "kind": "result", "text": _trim(text)}
-                            trace_log.append(msg)
-                            yield _sse({"type": "agent_message", **msg})
+                            # Skip if this exact result already showed at a deeper origin
+                            # level — don't repeat it as it bubbles up to the front-man.
+                            key = ("res", text.strip())
+                            if key not in seen_results:
+                                seen_results.add(key)
+                                msg = {"agent": agent, "path": path, "kind": "result", "text": _trim(text)}
+                                trace_log.append(msg)
+                                yield _sse({"type": "agent_message", **msg})
                 elif rtype == "AGENT" and text:
                     # An agent narrating its work — the agent-to-agent talk (skip framework plumbing).
                     if not _is_plumbing(text):
@@ -1720,6 +1851,19 @@ async def voices() -> Response:
             return Response(content=r.content, media_type="application/json")
     except Exception:  # noqa: BLE001
         return Response(content=json.dumps({"voices": []}), media_type="application/json")
+
+
+# ------------------------------------------------------ generated artifacts
+# Screenshots / recordings written by the browser tool (coded_tools/neura/browser_tool.py)
+# under data/artifacts/, rendered inline in chat. Registered before the "/" mount so it wins.
+@app.get("/artifacts/{fname}")
+async def get_artifact(fname: str):
+    if "/" in fname or "\\" in fname or ".." in fname:
+        return JSONResponse({"error": "bad name"}, status_code=400)
+    target = ROOT / "data" / "artifacts" / fname
+    if not target.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(str(target))
 
 
 # ---------------------------------------------------------------- static UI

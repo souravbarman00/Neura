@@ -19,6 +19,18 @@ import os
 from pathlib import Path
 from typing import Any
 
+# Handle Python 3.11+ ExceptionGroup compatibility
+try:
+    from builtins import ExceptionGroup
+except ImportError:
+    # For Python < 3.11, define a fallback ExceptionGroup
+    # that behaves like a regular Exception
+    class ExceptionGroup(Exception):
+        """Fallback ExceptionGroup for Python < 3.11"""
+        def __init__(self, message, exceptions):
+            super().__init__(message)
+            self.exceptions = exceptions
+
 from langchain_core.tools import BaseTool
 from neuro_san.interfaces.coded_tool import CodedTool
 from neuro_san.internals.run_context.langchain.mcp.langchain_mcp_adapter import LangChainMcpAdapter

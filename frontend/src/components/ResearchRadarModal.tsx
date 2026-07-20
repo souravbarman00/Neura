@@ -424,7 +424,11 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
               placeholder="Ask a question about this paper…"
               disabled={chat.busy}
             />
-            <button className="btn-primary" onClick={() => ask()} disabled={chat.busy || !q.trim()}>Ask</button>
+            {chat.busy ? (
+              <button className="btn-primary radar-stop" onClick={() => chat.stop()} title="Stop">■ Stop</button>
+            ) : (
+              <button className="btn-primary" onClick={() => ask()} disabled={!q.trim()}>Ask</button>
+            )}
           </div>
         </div>
       </div>
