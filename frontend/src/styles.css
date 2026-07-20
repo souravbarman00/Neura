@@ -247,15 +247,37 @@ button { font-family: inherit; }
 .radar-msg.md a { color: var(--accent); }
 .radar-msg.md strong { font-weight: 650; }
 
+/* Desktop: the mobile panel toggle bar is hidden (graph + tasks show inline). */
+.mpbar { display: none; }
+
 @media (max-width: 1024px) {
-  /* Stack: chat first (primary), graph + checklist below. */
+  /* Chat is full-screen; graph / checklist / memory are opened one at a time via the
+     toggle bar and shown as a bottom sheet, so nothing crowds a small screen. */
   .home-split { flex-direction: column; }
-  .home-left { flex: none; flex-direction: row; height: 40vh; padding: 12px 16px; }
-  .home-graph, .home-tasks { flex: 1 1 50%; }
-  .home-right { flex: 1 1 0; border-left: none; border-bottom: 1px solid var(--line); order: -1; }
-}
-@media (max-width: 640px) {
-  .home-left { flex-direction: column; height: auto; }
+  .home-right { flex: 1 1 0; order: 0; border-left: none; min-height: 0; }
+  .home-left { display: none; }
+  .home-split:not(.mp-none) .home-left {
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; right: 0; bottom: 0;
+    height: min(70vh, 70dvh); z-index: 45;
+    background: var(--panel); border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0; box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.45);
+    padding: 12px 14px 16px;
+  }
+  .home-split.mp-graph .home-tasks { display: none; }
+  .home-split.mp-graph .home-graph { flex: 1 1 0; }
+  .home-split.mp-checklist .home-graph,
+  .home-split.mp-memory .home-graph { display: none; }
+  .home-split.mp-checklist .home-tasks,
+  .home-split.mp-memory .home-tasks { flex: 1 1 0; min-height: 0; }
+
+  .mpbar { display: flex; gap: 8px; padding: 8px 14px 2px; flex: none; }
+  .mpbar button {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--line);
+    background: var(--field); border-radius: 10px; color: var(--fg-soft);
+    font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .mpbar button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 }
 
 @media (max-width: 1180px) {

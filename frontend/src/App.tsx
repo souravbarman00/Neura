@@ -86,6 +86,9 @@ export default function App() {
   const [progress, setProgress] = useState<number | null>(null);
   const [imagePending, setImagePending] = useState(false);
   const [leftTab, setLeftTab] = useState<"checklist" | "memory">("checklist");
+  // On small screens the graph/checklist/memory panels are hidden and shown one at a
+  // time via a toggle bar (as a bottom sheet). null = none open (chat is full-screen).
+  const [mobilePanel, setMobilePanel] = useState<null | "graph" | "checklist" | "memory">(null);
   const [wmRefresh, setWmRefresh] = useState(0);
   const [radarOpen, setRadarOpen] = useState(false);
   const [radarPaper, setRadarPaper] = useState<string | null>(null);
@@ -706,7 +709,7 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className="home-split">
+          <div className={"home-split mp-" + (mobilePanel || "none")}>
             <div className="home-left">
               <div className="home-graph">{graphEl}</div>
               <div className="home-tasks">
@@ -728,6 +731,24 @@ export default function App() {
               </div>
             </div>
             <div className="home-right">
+              <div className="mpbar">
+                {([
+                  ["graph", "Graph"],
+                  ["checklist", "Checklist"],
+                  ["memory", "Memory"],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={mobilePanel === key ? "on" : ""}
+                    onClick={() => {
+                      setMobilePanel((p) => (p === key ? null : key));
+                      if (key === "checklist" || key === "memory") setLeftTab(key);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               {threadEl}
               {composerEl}
             </div>
