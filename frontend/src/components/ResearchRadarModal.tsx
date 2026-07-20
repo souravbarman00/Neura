@@ -409,6 +409,7 @@ function RadarDetail({ item, theme }: { item: RadarItem; theme: "light" | "dark"
                 activity={chat.activity}
                 liveTrace={chat.liveTrace}
                 liveCommands={chat.liveCommands}
+                liveEvents={chat.liveEvents}
                 busy={chat.busy}
                 animatingId={chat.animatingId}
                 onQuick={(t) => ask(t)}

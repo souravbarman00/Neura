@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { getConversation, streamChat, type ChecklistItem } from "./api";
-import type { AgentMsg, CommandRun, FileChange, Message } from "./types";
+import type { AgentMsg, CommandRun, FileChange, Message, TurnEvent } from "./types";
 
 // Radar user turns are transmitted with a hidden paper-context preamble; strip it so
 // the reloaded user bubbles show just the question.
@@ -17,6 +17,7 @@ export interface UseChat {
   messages: Message[];
   activity: string | null;
   liveTrace: AgentMsg[];
+  liveEvents: TurnEvent[];
   checklist: ChecklistItem[];
   progress: number | null;
   imagePending: boolean;
@@ -46,6 +47,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
   const [progress, setProgress] = useState<number | null>(null);
   const [imagePending, setImagePending] = useState(false);
   const [liveCommands, setLiveCommands] = useState<CommandRun[]>([]);
+  const [liveEvents, setLiveEvents] = useState<TurnEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
@@ -60,6 +62,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     setActivity(null);
     setLiveTrace([]);
     setLiveCommands([]);
+    setLiveEvents([]);
     setChecklist([]);
     setProgress(null);
     setImagePending(false);
@@ -80,6 +83,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     setActivity(null);
     setLiveTrace([]);
     setLiveCommands([]);
+    setLiveEvents([]);
     setMessages(
       (conv.messages || []).map((m) => ({
         id: m.id,
@@ -105,6 +109,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     setBusy(true);
     setLiveTrace([]);
     setLiveCommands([]);
+    setLiveEvents([]);
     setActiveNodes(new Set());
     setActiveEdges(new Set());
     setMessages((m) => [...m, { id: nextId(), role: "user", text }]);
@@ -115,6 +120,8 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
     let created = false;
     const trace: AgentMsg[] = [];
     const cmds: CommandRun[] = [];
+    const events: TurnEvent[] = [];
+    const cardEvents = () => events.filter((e) => e.t !== "trace");
     const fcs: FileChange[] = [];
 
     try {
@@ -152,37 +159,35 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
           onLog: (entry) => setLogs((l) => [...l, entry].slice(-300)),
           onAgentMessage: (m) => {
             trace.push(m);
+            events.push({ t: "trace", agent: m.agent, text: m.text, kind: m.kind });
             setLiveTrace([...trace]);
+            setLiveEvents([...events]);
             if (created) setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, trace: [...trace] } : x)));
           },
           onCommand: (c) => {
             cmds.push(c);
-            // Once the answer bubble exists, commands live inside it — clear the live
-            // block so the same terminal cards don't show twice.
-            if (created) {
-              setLiveCommands([]);
-              setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, commands: [...cmds] } : x)));
-            } else {
-              setLiveCommands([...cmds]);
-            }
+            events.push({ t: "cmd", command: c.command, exit: c.exit, output: c.output });
+            setLiveEvents([...events]);
+            if (created) setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, commands: [...cmds], events: cardEvents() } : x)));
           },
           onFileChange: (fc) => {
             fcs.push(fc);
-            if (created) {
-              setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, fileChanges: [...fcs] } : x)));
-            }
+            events.push({ t: "diff", path: fc.path, diff: fc.diff, changeKind: fc.kind });
+            setLiveEvents([...events]);
+            if (created) setMessages((ms) => ms.map((x) => (x.id === aiId ? { ...x, fileChanges: [...fcs], events: cardEvents() } : x)));
           },
           onAnswer: (t) => {
             setActivity(null);
             setImagePending(false); // the answer carries the image now
-            setLiveCommands([]); // commands now live inside the message bubble
+            setLiveEvents([]); // work done; cards now live on the message, in order
+            setLiveCommands([]);
             finalAnswer = t;
             setMessages((m) => {
               if (!created) {
                 created = true;
-                return [...m, { id: aiId, role: "ai", text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] }];
+                return [...m, { id: aiId, role: "ai", text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs], events: cardEvents() }];
               }
-              return m.map((x) => (x.id === aiId ? { ...x, text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] } : x));
+              return m.map((x) => (x.id === aiId ? { ...x, text: t, trace: [...trace], commands: [...cmds], fileChanges: [...fcs], events: cardEvents() } : x));
             });
           },
           onChecklist: (items) => setChecklist(items || []),
@@ -217,7 +222,7 @@ export function useChat(cfg: { network: string; mode?: "strict" | "assist"; busy
   }
 
   return {
-    messages, activity, liveTrace, liveCommands, checklist, progress, imagePending, busy, animatingId,
+    messages, activity, liveTrace, liveCommands, liveEvents, checklist, progress, imagePending, busy, animatingId,
     activeNodes, activeEdges, logs, conversationId, send, stop, reset, load,
   };
 }

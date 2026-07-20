@@ -1,14 +1,14 @@
 import { useEffect, useRef } from "react";
-import type { AgentMsg, CommandRun, Message as Msg } from "../types";
+import type { AgentMsg, CommandRun, Message as Msg, TurnEvent } from "../types";
 import Message from "./Message";
-import TraceList from "./TraceList";
-import CommandCard from "./CommandCard";
+import Timeline from "./Timeline";
 
 interface Props {
   messages: Msg[];
   activity: string | null;
   liveTrace?: AgentMsg[];
   liveCommands?: CommandRun[];
+  liveEvents?: TurnEvent[];
   busy?: boolean;
   onQuick(q: string): void;
   onBuild(desc: string): void;
@@ -22,14 +22,15 @@ interface Props {
 
 const SUGGESTIONS = ["What is Neuro SAN?", "Summarize my projects", "How are coded tools defined?"];
 
-export default function Thread({ messages, activity, liveTrace, liveCommands, busy, onQuick, onBuild, onApprove, autoApprove, onRevertAuto, animatingId, userInitials, imagePending }: Props) {
+export default function Thread({ messages, activity, liveTrace, liveEvents, busy, onQuick, onBuild, onApprove, autoApprove, onRevertAuto, animatingId, userInitials, imagePending }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
+  const events = liveEvents || [];
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activity, liveTrace, liveCommands]);
+  }, [messages, activity, liveTrace, liveEvents]);
 
-  // Keep the live-trace box pinned to its newest line — including WHILE a line types
-  // out (content grows without a liveTrace change), via a ResizeObserver on the body.
+  // Keep the live timeline pinned to its newest item — including WHILE a line types out
+  // (content grows without an event change) — via a ResizeObserver on the body.
   const traceBoxRef = useRef<HTMLDivElement>(null);
   const traceContentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,11 +44,7 @@ export default function Thread({ messages, activity, liveTrace, liveCommands, bu
     const ro = new ResizeObserver(stick);
     ro.observe(content);
     return () => ro.disconnect();
-  }, [liveTrace, activity]);
-
-  // Show a deeper window in the (now taller) box; keyBase keeps line keys stable.
-  const traceShown = (liveTrace || []).slice(-12);
-  const traceKeyBase = Math.max(0, (liveTrace?.length || 0) - traceShown.length);
+  }, [liveEvents, activity]);
 
   if (messages.length === 0) {
     return (
@@ -86,27 +83,22 @@ export default function Thread({ messages, activity, liveTrace, liveCommands, bu
           userInitials={userInitials}
         />
       ))}
-      {liveCommands && liveCommands.length > 0 && (
-        <div className="live-commands">
-          {liveCommands.map((c, i) => (
-            <CommandCard key={i} cmd={c} />
-          ))}
-        </div>
-      )}
-      {activity && (
+      {(activity || events.length > 0) && (
         <div className="thinking">
-          <div className="thinking-head">
-            <div className="spin" />
-            <span>{activity}</span>
-          </div>
-          {liveTrace && liveTrace.length > 0 && (
+          {activity && (
+            <div className="thinking-head">
+              <div className="spin" />
+              <span>{activity}</span>
+            </div>
+          )}
+          {events.length > 0 && (
             <div className="thinking-box">
               <div className="thinking-box-head">
-                <span className="tbh-dot" /> Agents working — live trace
+                <span className="tbh-dot" /> Working — live
               </div>
               <div className="thinking-box-body" ref={traceBoxRef}>
                 <div ref={traceContentRef}>
-                  <TraceList items={traceShown} animate keyBase={traceKeyBase} />
+                  <Timeline events={events} />
                 </div>
               </div>
             </div>

@@ -37,7 +37,7 @@ import {
   type WatchStatus,
 } from "./api";
 import { useMediaQuery, useTheme } from "./hooks";
-import type { AgentMsg, CommandRun, FileChange, Message, Source } from "./types";
+import type { AgentMsg, CommandRun, FileChange, Message, Source, TurnEvent } from "./types";
 
 let idSeq = 0;
 const nextId = () => `local-${++idSeq}`;
@@ -82,6 +82,7 @@ export default function App() {
   const [logs, setLogs] = useState<{ kind: string; text: string }[]>([]);
   const [liveTrace, setLiveTrace] = useState<AgentMsg[]>([]);
   const [liveCommands, setLiveCommands] = useState<CommandRun[]>([]);
+  const [liveEvents, setLiveEvents] = useState<TurnEvent[]>([]); // chronological turn timeline
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
   const [imagePending, setImagePending] = useState(false);
@@ -346,6 +347,7 @@ export default function App() {
     setLogs([]);
     setLiveTrace([]);
     setLiveCommands([]);
+    setLiveEvents([]);
     // Keep the existing checklist across messages — the backend persists it per
     // conversation and only appends new steps. The stream re-emits the current
     // plan (and any updates) so it continues instead of restarting.
@@ -363,6 +365,8 @@ export default function App() {
     const trace: AgentMsg[] = [];
     const cmds: CommandRun[] = [];
     const fcs: FileChange[] = [];
+    const events: TurnEvent[] = []; // chronological: trace + cmd + diff, in arrival order
+    const cardEvents = () => events.filter((e) => e.t !== "trace"); // cmd+diff for the message
 
     try {
       await streamChat(
@@ -406,44 +410,47 @@ export default function App() {
             setSources(items);
             setActivity("Reading your files…");
           },
+          // All three stream into one chronological timeline (liveEvents) so thinking,
+          // commands, and code diffs appear in the exact order they happen, on the go.
           onAgentMessage: (m) => {
             trace.push(m);
+            events.push({ t: "trace", agent: m.agent, text: m.text, kind: m.kind });
             setLiveTrace([...trace]);
+            setLiveEvents([...events]);
             if (created) {
               setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, trace: [...trace] } : msg)));
             }
           },
           onCommand: (c) => {
             cmds.push(c);
-            // Before the answer bubble exists, show commands in the live block; once it
-            // exists they live INSIDE the message — clear the live block so the same
-            // terminal cards don't render twice (that double-render was confusing).
+            events.push({ t: "cmd", command: c.command, exit: c.exit, output: c.output });
+            setLiveEvents([...events]);
             if (created) {
-              setLiveCommands([]);
-              setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, commands: [...cmds] } : msg)));
-            } else {
-              setLiveCommands([...cmds]);
+              setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, commands: [...cmds], events: cardEvents() } : msg)));
             }
           },
           onFileChange: (fc) => {
             fcs.push(fc);
+            events.push({ t: "diff", path: fc.path, diff: fc.diff, changeKind: fc.kind });
+            setLiveEvents([...events]);
             if (created) {
-              setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, fileChanges: [...fcs] } : msg)));
+              setMessages((ms) => ms.map((msg) => (msg.id === aiId ? { ...msg, fileChanges: [...fcs], events: cardEvents() } : msg)));
             }
           },
           onAnswer: (t) => {
             setActivity(null);
             setImagePending(false);
-            setLiveCommands([]); // commands now live inside the message bubble
+            setLiveEvents([]); // work is done; the cards now live on the message, in order
+            setLiveCommands([]);
             finalAnswer = t;
             opts?.onAnswerStream?.(t);
             setMessages((m) => {
               if (!created) {
                 created = true;
-                return [...m, { id: aiId, role: "ai", text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] }];
+                return [...m, { id: aiId, role: "ai", text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs], events: cardEvents() }];
               }
               return m.map((msg) =>
-                msg.id === aiId ? { ...msg, text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs] } : msg
+                msg.id === aiId ? { ...msg, text: t, sources: liveSources, trace: [...trace], commands: [...cmds], fileChanges: [...fcs], events: cardEvents() } : msg
               );
             });
           },
@@ -490,6 +497,7 @@ export default function App() {
     setActivity(null);
     setLiveTrace([]);
     setLiveCommands([]);
+    setLiveEvents([]);
     setBusy(false);
     setImagePending(false);
     setWmRefresh((n) => n + 1); // re-fetch workflow memory (turn may have captured details)
@@ -617,6 +625,7 @@ export default function App() {
       activity={activity}
       liveTrace={liveTrace}
       liveCommands={liveCommands}
+      liveEvents={liveEvents}
       busy={busy}
       animatingId={animatingId}
       userInitials={userInitials}

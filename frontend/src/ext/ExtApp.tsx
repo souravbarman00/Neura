@@ -251,6 +251,7 @@ export default function ExtApp() {
           activity={chat.activity}
           liveTrace={chat.liveTrace}
           liveCommands={chat.liveCommands}
+          liveEvents={chat.liveEvents}
           busy={chat.busy}
           animatingId={chat.animatingId}
           userInitials="Me"

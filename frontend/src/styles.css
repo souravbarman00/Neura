@@ -1051,8 +1051,21 @@ button { font-family: inherit; }
   font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.5;
   background: var(--bg, #0b0e15);
 }
-.diff-line { padding: 0 12px; white-space: pre; }
+.diff-line { display: flex; align-items: flex-start; min-width: max-content; }
+.diff-ln {
+  flex: none; width: 42px; text-align: right; padding: 0 6px;
+  color: var(--fg-muted); opacity: 0.5; user-select: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+.diff-code { flex: 1 1 auto; white-space: pre; padding: 0 12px 0 8px; }
 .diff-ctx { color: var(--fg-soft); }
 .diff-add { background: rgba(63, 185, 80, 0.14); color: #6fd38a; }
 .diff-del { background: rgba(248, 81, 73, 0.14); color: #ff8b84; }
 .diff-hunk { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.diff-hunk .diff-ln { opacity: 0; }
+
+/* ---------- Chronological turn timeline (thinking + commands + diffs, in order) ---------- */
+.timeline { display: flex; flex-direction: column; gap: 8px; }
+.msg-timeline { margin-top: 4px; }
+.tl-trace { font-size: 12px; color: var(--fg-soft); line-height: 1.5; padding: 1px 2px; }
+.tl-trace .tl-agent { color: var(--accent); font-weight: 600; margin-right: 4px; }

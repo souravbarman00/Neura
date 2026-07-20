@@ -11,6 +11,7 @@ import { API_BASE } from "../api";
 import TraceList from "./TraceList";
 import CommandCard from "./CommandCard";
 import DiffCard from "./DiffCard";
+import Timeline from "./Timeline";
 
 // Rich, modern renderers: links open in a new tab (with an external-link icon),
 // tables scroll horizontally on overflow.
@@ -91,6 +92,7 @@ export default function Message({
   const trace = msg.trace || [];
   const commands = msg.commands || [];
   const fileChanges = msg.fileChanges || [];
+  const events = msg.events || []; // chronological cmd+diff (in-session); else fall back below
   // Type-out the in-flight answer (this message only); everything else is instant.
   const { shown, done } = useTypewriter(msg.text, !!animate && isAI);
   const showApproval = isAI && !!last && !busy && done && !!onApprove && isApprovalText(msg.text);
@@ -141,19 +143,30 @@ export default function Message({
             )}
           </div>
         )}
-        {isAI && commands.length > 0 && (
-          <div className="msg-commands">
-            {commands.map((c, i) => (
-              <CommandCard key={i} cmd={c} />
-            ))}
+        {isAI && events.length > 0 ? (
+          // Chronological: commands + code diffs in the exact order they happened.
+          <div className="msg-timeline">
+            <Timeline events={events} />
           </div>
-        )}
-        {isAI && fileChanges.length > 0 && (
-          <div className="msg-changes">
-            {fileChanges.map((f, i) => (
-              <DiffCard key={i} fc={f} />
-            ))}
-          </div>
+        ) : (
+          isAI && (
+            <>
+              {commands.length > 0 && (
+                <div className="msg-commands">
+                  {commands.map((c, i) => (
+                    <CommandCard key={i} cmd={c} />
+                  ))}
+                </div>
+              )}
+              {fileChanges.length > 0 && (
+                <div className="msg-changes">
+                  {fileChanges.map((f, i) => (
+                    <DiffCard key={i} fc={f} />
+                  ))}
+                </div>
+              )}
+            </>
+          )
         )}
         <div className="bubble">
           {isAI ? (

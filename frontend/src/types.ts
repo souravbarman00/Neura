@@ -25,6 +25,15 @@ export interface FileChange {
   kind?: string; // "edit" | "create" | "overwrite"
 }
 
+// One item in the chronological turn timeline (thinking / command / file diff), in the
+// exact order it happened, so the UI can stream it live and keep it time-ordered.
+export interface TurnEvent {
+  t: "trace" | "cmd" | "diff";
+  agent?: string; text?: string; kind?: string; // trace
+  command?: string; exit?: number; output?: string; // cmd
+  path?: string; diff?: string; changeKind?: string; // diff
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -34,6 +43,7 @@ export interface Message {
   trace?: AgentMsg[]; // agent-to-agent talk behind this answer (the "thinking")
   commands?: CommandRun[]; // shell commands the codebase agent ran (terminal cards)
   fileChanges?: FileChange[]; // file edits/creates the codebase agent made (diff cards)
+  events?: TurnEvent[]; // chronological command + diff cards (in-session; for time-ordered display)
 }
 
 export interface Health {
