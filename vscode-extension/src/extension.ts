@@ -70,7 +70,7 @@ async function resolveProjectPath(): Promise<string | undefined> {
   let dir = (cfg.get<string>("projectPath") || "").trim();
   const hasScript = async (d: string) => {
     try {
-      await vscode.workspace.fs.stat(vscode.Uri.file(`${d}/scripts/start_neura.sh`));
+      await vscode.workspace.fs.stat(vscode.Uri.file(`${d}/scripts/neura_serve.py`));
       return true;
     } catch {
       return false;
@@ -112,7 +112,12 @@ async function startNeura() {
     vscode.window.terminals.find((t) => t.name === "Neura") ||
     vscode.window.createTerminal({ name: "Neura", cwd: dir });
   term.show();
-  term.sendText(`bash "${dir}/scripts/start_neura.sh"`);
+  // Cross-platform: the launcher bootstraps the venv + starts every server.
+  const cmd =
+    process.platform === "win32"
+      ? `python "${dir}\\scripts\\neura_serve.py"`
+      : `bash "${dir}/scripts/start_neura.sh"`;
+  term.sendText(cmd);
   vscode.window.showInformationMessage(
     "Starting Neura… first run installs packages (can take a few minutes). The panel connects automatically once it's up."
   );

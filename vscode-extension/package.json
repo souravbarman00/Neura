@@ -2,7 +2,7 @@
   "name": "neura-vscode",
   "displayName": "Neura",
   "description": "Neura \u2014 your personal AI assistant, right inside VS Code. Chat, live agent trace, network graph, and task checklist; edits the folder you have open.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "sourav",
   "engines": {
     "vscode": "^1.85.0"

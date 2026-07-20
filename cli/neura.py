@@ -80,7 +80,11 @@ def _teardown() -> None:
     global _started
     if _started and _started.poll() is None:
         try:
-            os.killpg(os.getpgid(_started.pid), signal.SIGTERM)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(_started.pid), "/T", "/F"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            else:
+                os.killpg(os.getpgid(_started.pid), signal.SIGTERM)
         except Exception:  # noqa: BLE001
             try:
                 _started.terminate()
@@ -100,16 +104,22 @@ def ensure_backend(url: str, serve: bool, timeout: float = 300.0) -> bool:
     if not _is_local(url):
         console.print(f"[red]neura:[/] nothing at {url} and it's not local — can't auto-start.")
         return False
-    script = ROOT / "scripts" / "start_neura.sh"
-    if not script.exists():
-        console.print(f"[red]neura:[/] {script} not found — can't auto-start.")
+    launcher = ROOT / "scripts" / "neura_serve.py"
+    if not launcher.exists():
+        console.print(f"[red]neura:[/] {launcher} not found — can't auto-start.")
         return False
 
     logf = tempfile.NamedTemporaryFile(prefix="neura-cli-", suffix=".log", delete=False)
-    _started = subprocess.Popen(
-        ["bash", str(script)], cwd=str(ROOT), env=dict(os.environ),
-        stdout=logf, stderr=subprocess.STDOUT, start_new_session=True,
-    )
+    # Cross-platform launcher, run with THIS shell's environment so the agent's commands
+    # inherit your PATH/venv/tool logins. Own process group so we can stop the whole tree
+    # on exit. --no-voice: the CLI doesn't need TTS/STT (faster cold start).
+    popen_kw: dict = {"cwd": str(ROOT), "env": dict(os.environ),
+                      "stdout": logf, "stderr": subprocess.STDOUT}
+    if os.name == "nt":
+        popen_kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kw["start_new_session"] = True
+    _started = subprocess.Popen([sys.executable, str(launcher), "--no-voice"], **popen_kw)
     atexit.register(_teardown)
     for s in (signal.SIGTERM, signal.SIGINT):
         try:
@@ -187,21 +197,35 @@ class EscWatcher:
         self._thread: threading.Thread | None = None
 
     def __enter__(self) -> "EscWatcher":
+        if not sys.stdin.isatty():
+            return self
         try:
-            import termios
-            import tty
-            if sys.stdin.isatty():
+            if os.name == "nt":
+                import msvcrt  # noqa: F401  (Windows keypress API)
+                self._active.set()
+                self._thread = threading.Thread(target=self._watch_win, daemon=True)
+                self._thread.start()
+            else:
+                import termios
+                import tty
                 self._fd = sys.stdin.fileno()
                 self._old = termios.tcgetattr(self._fd)
                 tty.setcbreak(self._fd)
                 self._active.set()
-                self._thread = threading.Thread(target=self._watch, daemon=True)
+                self._thread = threading.Thread(target=self._watch_posix, daemon=True)
                 self._thread.start()
-        except Exception:  # noqa: BLE001 (non-POSIX / no tty)
+        except Exception:  # noqa: BLE001 (no tty / unsupported)
             pass
         return self
 
-    def _watch(self) -> None:
+    def _trip(self) -> None:
+        self.interrupted.set()
+        try:
+            self.resp.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _watch_posix(self) -> None:
         import select
         while self._active.is_set():
             try:
@@ -214,12 +238,22 @@ class EscWatcher:
                 except Exception:  # noqa: BLE001
                     return
                 if ch == "\x1b":  # Esc
-                    self.interrupted.set()
-                    try:
-                        self.resp.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    self._trip()
                     return
+
+    def _watch_win(self) -> None:
+        import msvcrt
+        while self._active.is_set():
+            if msvcrt.kbhit():
+                try:
+                    ch = msvcrt.getwch()
+                except Exception:  # noqa: BLE001
+                    return
+                if ch == "\x1b":  # Esc
+                    self._trip()
+                    return
+            else:
+                time.sleep(0.05)
 
     def __exit__(self, *_a) -> None:
         self._active.clear()
@@ -460,8 +494,9 @@ def main() -> None:
     url = args.url.rstrip("/")
     if not ensure_backend(url, serve=not args.no_serve):
         if args.no_serve:
+            start = "scripts\\start_neura.cmd" if os.name == "nt" else "bash scripts/start_neura.sh"
             console.print(f"[red]neura:[/] backend not reachable at {url}")
-            console.print("[dim]Start it:  bash scripts/start_neura.sh   (or drop --no-serve to auto-start)[/]")
+            console.print(f"[dim]Start it:  {start}   (or drop --no-serve to auto-start)[/]")
         sys.exit(2)
 
     if args.prompt:

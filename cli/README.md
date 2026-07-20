@@ -24,23 +24,30 @@ and the VS Code extension.
 
 ## 1. Prerequisites
 
-- **macOS or Linux**, **Python 3.10+**, **Bash**.
+- **Windows, macOS, or Linux**, **Python 3.10+**.
 - An **LLM API key** (Anthropic, OpenAI, or Mistral).
-- Optional but recommended: [`uv`](https://github.com/astral-tool/uv) (faster installs).
-  If `uv` isn't present the scripts fall back to `pip`.
+- Optional but recommended: [`uv`](https://github.com/astral-sh/uv) (faster installs);
+  falls back to `pip`. `node`/`npm` only if you want the web UI built.
 - You already have the **`personal-ai-assistant`** folder.
 
 ## 2. Get it running (fastest path)
 
 From inside the project folder:
 
+**macOS / Linux**
 ```bash
 cd personal-ai-assistant
 ./scripts/neura
 ```
 
-The first time, if no backend is running, the CLI **auto-starts one** — it runs
-`scripts/start_neura.sh`, which:
+**Windows** (PowerShell or cmd)
+```bat
+cd personal-ai-assistant
+scripts\neura.cmd
+```
+
+The first time, if no backend is running, the CLI **auto-starts one** — it runs the
+cross-platform launcher `scripts/neura_serve.py` (works on Windows/macOS/Linux), which:
 
 1. creates the `.venv` if missing,
 2. installs all Python packages (first run only; cached afterwards),
@@ -70,11 +77,17 @@ inside the CLI with **`/model`**.
 
 Put the launcher on your `PATH` so you can type `neura` in any project:
 
+**macOS / Linux**
 ```bash
-# pick a dir already on your PATH (e.g. ~/.local/bin)
-ln -s "$(pwd)/scripts/neura" ~/.local/bin/neura
-# then, in any project:
+ln -s "$(pwd)/scripts/neura" ~/.local/bin/neura   # ~/.local/bin is usually on PATH
 cd ~/some-project && neura
+```
+
+**Windows** — add the `scripts` folder to your PATH (so `neura.cmd` resolves), e.g. in
+PowerShell:
+```powershell
+$env:Path += ";C:\path\to\personal-ai-assistant\scripts"   # or add it permanently in System settings
+cd C:\some-project ; neura
 ```
 
 The launcher resolves the symlink back to the project, so it still finds the code and
@@ -131,7 +144,8 @@ via env (`NEURA_UI_PORT`, `NEURA_HTTP_PORT`, …) before launching.
 - **`zsh: command not found: neura`** — the symlink isn't on your `PATH`. Use
   `./scripts/neura` from the project, or symlink into a `PATH` dir (step 4), then open a
   new terminal or run `hash -r`.
-- **"backend not reachable" / `--no-serve`** — start it: `bash scripts/start_neura.sh`,
+- **"backend not reachable" / `--no-serve`** — start it: `bash scripts/start_neura.sh`
+  (macOS/Linux) or `scripts\start_neura.cmd` / `python scripts\neura_serve.py` (Windows),
   or drop `--no-serve` to auto-start.
 - **"backend failed to start"** — the CLI prints the last log lines and the full log path.
   Usually a missing API key or a port already in use.
