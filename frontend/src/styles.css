@@ -973,3 +973,33 @@ button { font-family: inherit; }
   width: 26px; height: 26px; border-radius: 8px;
   background: linear-gradient(135deg, #7c7cf6, #4f46e5); color: #fff; font-size: 14px;
 }
+
+/* ================= Responsive hardening — all-screen friendly ================= */
+/* Modals never exceed a short/mobile viewport (dvh accounts for the mobile URL bar). */
+.modal { max-height: calc(100vh - 28px); overflow-y: auto; }
+.modal { max-height: calc(100dvh - 28px); }
+
+/* Topbar title clips instead of pushing the action buttons off-screen. */
+.topbar .title { overflow: hidden; }
+.topbar .title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Chat media / tables / code stay within the bubble on any width. */
+.bubble img, .bubble video, .md-media { max-width: 100%; height: auto; }
+.bubble table { display: block; width: 100%; overflow-x: auto; }
+.bubble pre { max-width: 100%; }
+
+/* Tablet: slightly tighter reading gutters. */
+@media (max-width: 1024px) { .thread { padding: 24px 5%; } }
+
+/* Phones. */
+@media (max-width: 480px) {
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .topbar .title { font-size: 14px; }
+  .iconbtn { width: 34px; height: 34px; }
+  .thread { padding: 16px 14px !important; gap: 16px; }
+  .composer { padding: 10px 12px 16px !important; }
+  .bubble { font-size: 13.5px; padding: 12px 14px; }
+  .msg { gap: 10px; }
+  .modal { border-radius: 14px; padding: 18px; }
+  .modal-scrim { padding: 12px; }
+}
