@@ -44,7 +44,7 @@ function isCode(t: AgentMsg): boolean {
   return t.kind === "result" || /^HTTP \d/.test(s) || s.startsWith("{") || s.startsWith("[");
 }
 
-function TraceLine({ t, animate }: { t: AgentMsg; animate: boolean }) {
+export function TraceLine({ t, animate }: { t: AgentMsg; animate: boolean }) {
   const code = isCode(t);
   const full = code ? prettify(t.text) : t.text || "";
   const { shown, done } = useTypewriter(full, animate);

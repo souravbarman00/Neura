@@ -98,7 +98,7 @@ export default function Thread({ messages, activity, liveTrace, liveEvents, busy
               </div>
               <div className="thinking-box-body" ref={traceBoxRef}>
                 <div ref={traceContentRef}>
-                  <Timeline events={events} />
+                  <Timeline events={events} animate />
                 </div>
               </div>
             </div>
