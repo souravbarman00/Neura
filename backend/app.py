@@ -1381,14 +1381,55 @@ def _write_env(config: dict) -> None:
     ENV_FILE.chmod(0o600)
 
 
+def _kill_runtime() -> None:
+    """Stop the neuro-san runtime, cross-platform."""
+    port = os.environ.get("NEURA_HTTP_PORT", "8099")
+    if os.name == "nt":
+        # Kill whatever is LISTENING on the runtime port (netstat → taskkill).
+        try:
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True).stdout
+            pids = set()
+            for line in out.splitlines():
+                parts = line.split()
+                if (len(parts) >= 5 and parts[0] == "TCP"
+                        and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING"):
+                    pids.add(parts[4])
+            for pid in pids:
+                subprocess.run(["taskkill", "/F", "/PID", pid],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        subprocess.run(["pkill", "-f", "neuro_san.service.main_loop.server_main_loop"], check=False)
+
+
 def _restart_runtime() -> None:
-    subprocess.run(["pkill", "-f", "neuro_san.service.main_loop.server_main_loop"], check=False)
+    """Restart the neuro-san runtime cross-platform (no bash / pkill dependency).
+
+    Spawns the server directly with this backend's Python (the venv) and the same env the
+    launcher sets, so it works on Windows, macOS, and Linux."""
+    _kill_runtime()
+    env = dict(os.environ)
+    env["AGENT_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
+    env["AGENT_TOOL_PATH"] = str(ROOT / "coded_tools")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(ROOT), str(ROOT / "coded_tools"), os.environ.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    env["AGENT_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "toolbox_info.hocon")
+    env["AGENT_NETWORK_DESIGNER_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "agent_network_designer_toolbox_info.hocon")
+    env["AGENT_NETWORK_DESIGNER_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
+    env["MCP_SERVERS_INFO_FILE"] = str(ROOT / "config" / "mcp" / "mcp_info.hocon")
+    env.setdefault("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")
+    port = os.environ.get("NEURA_HTTP_PORT", "8099")
+    kw: dict = {"cwd": str(ROOT), "env": env,
+                "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if os.name == "nt":
+        kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
     subprocess.Popen(
-        ["bash", str(ROOT / "scripts" / "run_server.sh")],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        cwd=str(ROOT),
+        [sys.executable, "-m", "neuro_san.service.main_loop.server_main_loop",
+         "--http_port", port], **kw,
     )
 
 
