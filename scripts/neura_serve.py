@@ -15,6 +15,7 @@ import hashlib
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -125,6 +126,38 @@ def base_env() -> dict:
     return env
 
 
+def _port_in_use(port: str) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", int(port))) == 0
+
+
+def free_port(port: str) -> None:
+    """Kill whatever is LISTENING on a port and wait for it to release, so a re-run
+    (or a stale server) doesn't cause 'address already in use' (WinError 10048)."""
+    if not _port_in_use(port):
+        return
+    log(f"▸ Freeing port {port} (a previous server is still running)…")
+    if IS_WIN:
+        try:
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True).stdout
+            pids = {p.split()[-1] for p in out.splitlines()
+                    if len(p.split()) >= 5 and p.split()[0] == "TCP"
+                    and p.split()[1].endswith(f":{port}") and p.split()[3].upper() == "LISTENING"}
+            for pid in pids:
+                subprocess.run(["taskkill", "/F", "/PID", pid],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        subprocess.run(["bash", "-c", f"lsof -ti tcp:{port} | xargs kill -9 2>/dev/null || true"],
+                       check=False)
+    for _ in range(20):  # wait up to ~5s for the OS to release it
+        if not _port_in_use(port):
+            return
+        time.sleep(0.25)
+
+
 def spawn(cmd: list[str], cwd: Path, env: dict) -> None:
     _procs.append(subprocess.Popen(cmd, cwd=str(cwd), env=env))
 
@@ -132,6 +165,13 @@ def spawn(cmd: list[str], cwd: Path, env: dict) -> None:
 def start_all(no_voice: bool) -> None:
     env = base_env()
     py = str(VENV_PY)
+
+    # Free the ports first so a re-run cleanly restarts instead of hitting "address in use".
+    free_port(env["NEURA_HTTP_PORT"])
+    free_port(env["NEURA_UI_PORT"])
+    if not no_voice:
+        free_port(env["TTS_PORT"])
+        free_port(env["STT_PORT"])
 
     # neuro-san runtime. The manifest paths are RELATIVE (resolved against cwd=ROOT):
     # neuro-san splits AGENT_MANIFEST_FILE on spaces, so an absolute path under a folder

@@ -12,8 +12,10 @@ import asyncio
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -1441,6 +1443,14 @@ def _kill_runtime() -> None:
             pass
     else:
         subprocess.run(["pkill", "-f", "neuro_san.service.main_loop.server_main_loop"], check=False)
+    # Wait for the OS to actually release the port, so the restart below doesn't hit
+    # "address already in use" (WinError 10048).
+    for _ in range(20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.3)
+            if s.connect_ex(("127.0.0.1", int(port))) != 0:
+                return
+        time.sleep(0.25)
 
 
 def _restart_runtime() -> None:
