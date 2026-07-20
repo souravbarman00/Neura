@@ -1410,14 +1410,16 @@ def _restart_runtime() -> None:
     launcher sets, so it works on Windows, macOS, and Linux."""
     _kill_runtime()
     env = dict(os.environ)
-    env["AGENT_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
+    # RELATIVE manifest paths (resolved against cwd=ROOT): neuro-san splits
+    # AGENT_MANIFEST_FILE on spaces, so an absolute path under a spaces folder crashes.
+    env["AGENT_MANIFEST_FILE"] = os.path.join("registries", "manifest.hocon")
+    env["AGENT_NETWORK_DESIGNER_MANIFEST_FILE"] = os.path.join("registries", "manifest.hocon")
     env["AGENT_TOOL_PATH"] = str(ROOT / "coded_tools")
     env["PYTHONPATH"] = os.pathsep.join(
         [str(ROOT), str(ROOT / "coded_tools"), os.environ.get("PYTHONPATH", "")]
     ).rstrip(os.pathsep)
     env["AGENT_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "toolbox_info.hocon")
     env["AGENT_NETWORK_DESIGNER_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "agent_network_designer_toolbox_info.hocon")
-    env["AGENT_NETWORK_DESIGNER_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
     env["MCP_SERVERS_INFO_FILE"] = str(ROOT / "config" / "mcp" / "mcp_info.hocon")
     env.setdefault("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")
     port = os.environ.get("NEURA_HTTP_PORT", "8099")

@@ -128,16 +128,18 @@ def start_all(no_voice: bool) -> None:
     env = base_env()
     py = str(VENV_PY)
 
-    # neuro-san runtime
+    # neuro-san runtime. The manifest paths are RELATIVE (resolved against cwd=ROOT):
+    # neuro-san splits AGENT_MANIFEST_FILE on spaces, so an absolute path under a folder
+    # with spaces (e.g. C:\Users\First Last\…) would shatter and crash. Relative avoids it.
     server_env = dict(env)
-    server_env["AGENT_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
+    server_env["AGENT_MANIFEST_FILE"] = os.path.join("registries", "manifest.hocon")
+    server_env["AGENT_NETWORK_DESIGNER_MANIFEST_FILE"] = os.path.join("registries", "manifest.hocon")
     server_env["AGENT_TOOL_PATH"] = str(ROOT / "coded_tools")
     sep = os.pathsep
     server_env["PYTHONPATH"] = sep.join([str(ROOT), str(ROOT / "coded_tools"),
                                          os.environ.get("PYTHONPATH", "")]).rstrip(sep)
     server_env["AGENT_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "toolbox_info.hocon")
     server_env["AGENT_NETWORK_DESIGNER_TOOLBOX_INFO_FILE"] = str(ROOT / "config" / "agent_network_designer_toolbox_info.hocon")
-    server_env["AGENT_NETWORK_DESIGNER_MANIFEST_FILE"] = str(ROOT / "registries" / "manifest.hocon")
     server_env["MCP_SERVERS_INFO_FILE"] = str(ROOT / "config" / "mcp" / "mcp_info.hocon")
     server_env.setdefault("AGENT_MANIFEST_UPDATE_PERIOD_SECONDS", "5")
     spawn([py, "-m", "neuro_san.service.main_loop.server_main_loop",

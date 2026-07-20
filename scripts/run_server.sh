@@ -22,7 +22,9 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   exit 1
 fi
 
-export AGENT_MANIFEST_FILE="$ROOT/registries/manifest.hocon"
+# Relative manifest path (we cd'd to ROOT): neuro-san splits AGENT_MANIFEST_FILE on
+# spaces, so an absolute path under a folder with spaces would shatter and crash.
+export AGENT_MANIFEST_FILE="registries/manifest.hocon"
 export AGENT_TOOL_PATH="$ROOT/coded_tools"
 # Repo root is on the path so `coded_tools.*` and `middleware.*` class references resolve.
 export PYTHONPATH="$ROOT:$ROOT/coded_tools:${PYTHONPATH:-}"
@@ -30,7 +32,7 @@ export PYTHONPATH="$ROOT:$ROOT/coded_tools:${PYTHONPATH:-}"
 # Toolbox + MCP catalogs (used by the agent-network designer family).
 export AGENT_TOOLBOX_INFO_FILE="$ROOT/config/toolbox_info.hocon"
 export AGENT_NETWORK_DESIGNER_TOOLBOX_INFO_FILE="$ROOT/config/agent_network_designer_toolbox_info.hocon"
-export AGENT_NETWORK_DESIGNER_MANIFEST_FILE="$ROOT/registries/manifest.hocon"
+export AGENT_NETWORK_DESIGNER_MANIFEST_FILE="registries/manifest.hocon"
 export MCP_SERVERS_INFO_FILE="$ROOT/config/mcp/mcp_info.hocon"
 
 # Poll the manifest so newly-spawned networks become live without a restart.
