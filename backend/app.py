@@ -1124,14 +1124,24 @@ def _network_details_map(name: str) -> dict:
     if not hocon.exists():
         return {}
     try:
+        import logging as _logging
+
         from pyhocon import ConfigFactory
 
+        # pyhocon resolves `include "config/…"` relative to the FILE's dir (registries/),
+        # so the network's top-level include "misses" and logs a noisy warning on every
+        # graph poll. The runtime resolves it fine and we have a model fallback below, so
+        # silence pyhocon just for this best-effort metadata parse.
+        _pl = _logging.getLogger("pyhocon")
+        _prev = _pl.level
+        _pl.setLevel(_logging.CRITICAL)
         cwd = os.getcwd()
         os.chdir(str(spawn.ROOT))  # so relative `include` paths resolve
         try:
             conf = ConfigFactory.parse_file(str(hocon))
         finally:
             os.chdir(cwd)
+            _pl.setLevel(_prev)
     except Exception:  # noqa: BLE001
         return {}
 
