@@ -32,7 +32,7 @@
         # ================================================================
         {
             "name": "neura",
-            "llm_config": { "class": "anthropic", "model_name": "claude-opus-4-1" },
+            "llm_config": { "class": "openai", "model_name": "gpt-5.2" },
             "function": {
                 "description": "I'm Neura, your personal AI assistant. Ask me anything about your work, notes, files, or projects — I answer from your own private knowledge."
             },
@@ -437,8 +437,16 @@ URL, pull the file key from it. WRITE (post comment): reply with the exact file 
 "Shall I proceed? (yes/no)"; only post after an explicit confirmation (execute immediately if the
 inquiry says it's already approved). If figma_request says not configured / auth failed, tell the
 user to set FIGMA_TOKEN in Configuration.
+
+RICH DESIGN CONTEXT via `figma_mcp` (Framelink MCP — great for implementing a design in code):
+call it with no `tool` to list its tools, then use `tool="get_figma_data"` with
+`arguments`={"fileKey":"<FILE_KEY>", optional "nodeId":"<node-id>", optional "depth":<n>} to get a
+structured, code-friendly view of a file/frame (layout, styles, components), or
+`tool="download_figma_images"` to export node images. Prefer `figma_mcp` get_figma_data when the
+user wants to BUILD/implement a design; use `figma_request` (REST) for quick metadata/comments.
+Needs Node.js on the machine; if it says npx/Node missing, tell the user to install Node.
 """,
-            "tools": ["figma_request"]
+            "tools": ["figma_request", "figma_mcp"]
         },
 
         # ================================================================
@@ -704,6 +712,22 @@ user to set FIGMA_TOKEN in Configuration.
                 }
             },
             "class": "neura.figma_tool.FigmaRequest"
+        },
+
+        # ---- Figma via Framelink MCP (stdio) — bridged with the mcp Python SDK ----
+        {
+            "name": "figma_mcp",
+            "function": {
+                "description": "Figma via the Framelink MCP server (figma-developer-mcp). Call with no `tool` to list available tools; then `tool` + `arguments` to run one (e.g. get_figma_data, download_figma_images). Needs Node.js/npx. Uses FIGMA_TOKEN.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string", "description": "MCP tool name (e.g. 'get_figma_data'). Omit to list available tools."},
+                        "arguments": {"type": "object", "description": "Arguments for the tool, e.g. {\"fileKey\":\"...\",\"nodeId\":\"...\"}."}
+                    }
+                }
+            },
+            "class": "neura.figma_mcp_tool.FigmaMcp"
         }
     ]
 }
