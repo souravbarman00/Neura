@@ -54,9 +54,28 @@ class _FileTokenStorage:
         d = self._read(); d["tokens"] = tokens.model_dump(); self._write(d)
 
     async def get_client_info(self):
+        import os
+
         from mcp.shared.auth import OAuthClientInformationFull
         d = self._read().get("client_info")
-        return OAuthClientInformationFull.model_validate(d) if d else None
+        if d:
+            return OAuthClientInformationFull.model_validate(d)
+        # Figma's remote MCP blocks anonymous dynamic client registration (403). If you have
+        # a pre-registered client (partner credentials), set FIGMA_OAUTH_CLIENT_ID/SECRET to
+        # skip registration and use it directly.
+        cid = os.environ.get("FIGMA_OAUTH_CLIENT_ID")
+        if cid:
+            secret = os.environ.get("FIGMA_OAUTH_CLIENT_SECRET")
+            return OAuthClientInformationFull(
+                client_id=cid,
+                client_secret=secret,
+                redirect_uris=[CALLBACK_URL],
+                grant_types=["authorization_code", "refresh_token"],
+                response_types=["code"],
+                token_endpoint_auth_method="client_secret_post" if secret else "none",
+                scope="mcp:connect",
+            )
+        return None
 
     async def set_client_info(self, client_info) -> None:
         d = self._read(); d["client_info"] = client_info.model_dump(mode="json"); self._write(d)
@@ -158,8 +177,32 @@ class FigmaEdit(CodedTool):
                     return out or "(done — no content returned)"
         except TimeoutError as exc:
             return f"Figma OAuth/timeout: {exc} (complete the sign-in in the browser, then retry)."
-        except Exception as exc:  # noqa: BLE001
-            return f"Figma edit error: {exc}"
+        except BaseException as exc:  # noqa: BLE001 — unwrap anyio TaskGroup ExceptionGroups
+            import traceback
+
+            def flatten(e):
+                out = []
+                inner = getattr(e, "exceptions", None)
+                if inner:
+                    for x in inner:
+                        out.extend(flatten(x))
+                else:
+                    out.append(f"{type(e).__name__}: {e}")
+                return out
+
+            detail = " | ".join(flatten(exc)) or f"{type(exc).__name__}: {exc}"
+            if "Registration failed: 403" in detail:
+                return ("Figma's official remote MCP blocks anonymous client registration (403) — "
+                        "it's gated to partner apps (VS Code, Cursor, Claude, …). Neura can't "
+                        "self-register. Either set FIGMA_OAUTH_CLIENT_ID (a pre-registered Figma "
+                        "MCP client) and retry, or use the plugin-based editing path (talk-to-figma).")
+            try:
+                (TOKEN_FILE.parent / "figma_edit_error.log").write_text(
+                    "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            return f"Figma edit failed — real cause: {detail}  (full traceback: data/figma_edit_error.log)"
 
     async def async_invoke(self, args: Dict[str, Any], sly_data: Dict[str, Any]) -> Any:
         return await self._run(args)
