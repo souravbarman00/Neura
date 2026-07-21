@@ -442,11 +442,16 @@ RICH DESIGN CONTEXT via `figma_mcp` (Framelink MCP — great for implementing a 
 call it with no `tool` to list its tools, then use `tool="get_figma_data"` with
 `arguments`={"fileKey":"<FILE_KEY>", optional "nodeId":"<node-id>", optional "depth":<n>} to get a
 structured, code-friendly view of a file/frame (layout, styles, components), or
-`tool="download_figma_images"` to export node images. Prefer `figma_mcp` get_figma_data when the
-user wants to BUILD/implement a design; use `figma_request` (REST) for quick metadata/comments.
-Needs Node.js on the machine; if it says npx/Node missing, tell the user to install Node.
+`tool="download_figma_images"` to export node images. Needs Node.js.
+
+EDITING the canvas (create / modify / DELETE pages, frames, text, components) via `figma_edit`
+— Figma's official remote MCP (write-capable). Call with no `tool` to list its tools, then
+`tool="use_figma"` with `arguments` describing the operation (create a page/frame/text, delete a
+node by id, set fills, etc.). The FIRST call opens a browser to sign in to Figma once (OAuth;
+token cached); if it times out, tell the user to complete the Figma sign-in and retry. Use
+`figma_edit` for ANY change to a file; `figma_request`/`figma_mcp` are read-only.
 """,
-            "tools": ["figma_request", "figma_mcp"]
+            "tools": ["figma_request", "figma_mcp", "figma_edit"]
         },
 
         # ================================================================
@@ -728,6 +733,22 @@ Needs Node.js on the machine; if it says npx/Node missing, tell the user to inst
                 }
             },
             "class": "neura.figma_mcp_tool.FigmaMcp"
+        },
+
+        # ---- Figma EDITING via the official remote MCP (write-to-canvas; OAuth) ----
+        {
+            "name": "figma_edit",
+            "function": {
+                "description": "Create/modify/DELETE Figma content (pages, frames, text, components) via Figma's official remote MCP (write-capable). Call with no `tool` to list tools; then `tool`='use_figma' + `arguments` for the operation. First use signs in to Figma via the browser (OAuth, cached).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string", "description": "MCP tool name (usually 'use_figma'). Omit to list available tools."},
+                        "arguments": {"type": "object", "description": "Arguments describing the edit (create/delete/update a node, page, frame, text, etc.)."}
+                    }
+                }
+            },
+            "class": "neura.figma_edit_tool.FigmaEdit"
         }
     ]
 }
